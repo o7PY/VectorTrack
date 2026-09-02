@@ -180,27 +180,27 @@ const FEATURES: Feature[] = [
   {
     title: 'Live PID tuning',
     body: 'Drag Kp, Ki, or Kd mid-run and the next simulation tick applies it immediately — no restart. Watch overshoot show up and settle out as you turn a single knob.',
-    screenshot: { src: '/vectortrack/screenshots/pid-panel.jpg', path: 'vectortrack/#/simulator', caption: 'The PID panel: slider + numeric input per gain, reset to defaults.' },
+    screenshot: { src: '/VectorTrack/screenshots/pid-panel.jpg', path: 'VectorTrack/#/simulator', caption: 'The PID panel: slider + numeric input per gain, reset to defaults.' },
   },
   {
     title: 'Two view modes',
     body: 'A 2D canvas for debugging — sensor readings, raycasts, trajectory trail — and a full 3D scene with Isometric, Top-Down, and Chase camera presets. Same state, zero resets when you switch.',
-    screenshot: { src: '/vectortrack/screenshots/line-follower-2d.jpg', path: 'vectortrack/#/simulator', caption: '2D debug view — trajectory trail, sensor dots, live telemetry.' },
+    screenshot: { src: '/VectorTrack/screenshots/line-follower-2d.jpg', path: 'VectorTrack/#/simulator', caption: '2D debug view — trajectory trail, sensor dots, live telemetry.' },
   },
   {
     title: 'Five algorithms',
     body: 'Bang-Bang, Proportional, and PID for line following; Wall Follower and Flood Fill for maze solving — each with the parameters real implementations expose.',
-    screenshot: { src: '/vectortrack/screenshots/maze-solver-2d.jpg', path: 'vectortrack/#/simulator', caption: 'Wall-follower raycasts, visualized live as the algorithm decides.' },
+    screenshot: { src: '/VectorTrack/screenshots/maze-solver-2d.jpg', path: 'VectorTrack/#/simulator', caption: 'Wall-follower raycasts, visualized live as the algorithm decides.' },
   },
   {
     title: 'Ten built-in maps',
     body: 'Five line tracks and five mazes, including one hand-built with a loop specifically to demonstrate where wall-following breaks down and flood fill doesn’t.',
-    screenshot: { src: '/vectortrack/screenshots/line-follower-3d.jpg', path: 'vectortrack/#/simulator', caption: 'The Warm-Up Oval, one of five line tracks, in the 3D view.' },
+    screenshot: { src: '/VectorTrack/screenshots/line-follower-3d.jpg', path: 'VectorTrack/#/simulator', caption: 'The Warm-Up Oval, one of five line tracks, in the 3D view.' },
   },
   {
     title: 'Deterministic simulation',
     body: 'A fixed 120 Hz physics step, decoupled from render rate. Same map, robot, algorithm, and gains always produce the identical trajectory, every time you reload.',
-    screenshot: { src: '/vectortrack/screenshots/maze-solver-3d.jpg', path: 'vectortrack/#/simulator', caption: 'Extruded maze walls in the 3D isometric view.' },
+    screenshot: { src: '/VectorTrack/screenshots/maze-solver-3d.jpg', path: 'VectorTrack/#/simulator', caption: 'Extruded maze walls in the 3D isometric view.' },
   },
 ];
 

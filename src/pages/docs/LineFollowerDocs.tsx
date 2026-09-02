@@ -83,7 +83,7 @@ const correction = (p + i) * ERROR_GAIN_SCALE + d * D_GAIN_SCALE;`}
             ['Ranger', '0.3', '0', '0.2', '500 mm/s'],
           ]}
         />
-        <Shot src="/vectortrack/screenshots/docs/line-algorithm.jpg" alt="PID parameter panel" caption="Algorithm + Parameters panel, PID selected — every gain is live-tunable mid-run." />
+        <Shot src="/VectorTrack/screenshots/docs/line-algorithm.jpg" alt="PID parameter panel" caption="Algorithm + Parameters panel, PID selected — every gain is live-tunable mid-run." />
       </SubSection>
 
       <SubSection id="line-robot" title="Robot">
@@ -99,7 +99,7 @@ const correction = (p + i) * ERROR_GAIN_SCALE + d * D_GAIN_SCALE;`}
             ['Ranger', '5', '12 mm', '55 mm', '70 mm', '800 mm/s', 'Fine resolution, twitchy, needs tuned gains.'],
           ]}
         />
-        <Shot src="/vectortrack/screenshots/docs/line-robot.jpg" alt="Robot selection panel" caption="Robot panel — spec readout updates live as you switch chassis." />
+        <Shot src="/VectorTrack/screenshots/docs/line-robot.jpg" alt="Robot selection panel" caption="Robot panel — spec readout updates live as you switch chassis." />
       </SubSection>
 
       <SubSection id="line-map" title="Map">
@@ -122,8 +122,8 @@ const correction = (p + i) * ERROR_GAIN_SCALE + d * D_GAIN_SCALE;`}
           for an instant unless the gains are tuned for it.
         </p>
         <div className="flex flex-wrap gap-4">
-          <Shot src="/vectortrack/screenshots/docs/line-map-list.jpg" alt="Line map list" caption="The five line tracks, with mini thumbnails and completion checkmarks." />
-          <Shot src="/vectortrack/screenshots/docs/line-track-2d.jpg" alt="2D line track view" caption="Warm-Up Oval in the 2D debug view — trajectory trail visible behind the robot." />
+          <Shot src="/VectorTrack/screenshots/docs/line-map-list.jpg" alt="Line map list" caption="The five line tracks, with mini thumbnails and completion checkmarks." />
+          <Shot src="/VectorTrack/screenshots/docs/line-track-2d.jpg" alt="2D line track view" caption="Warm-Up Oval in the 2D debug view — trajectory trail visible behind the robot." />
         </div>
       </SubSection>
 
@@ -135,13 +135,13 @@ const correction = (p + i) * ERROR_GAIN_SCALE + d * D_GAIN_SCALE;`}
           picker (Isometric, Top-Down, or Chase — the chase camera re-aims from the robot's live heading every
           frame rather than translating a fixed offset, so it doesn't drift out of alignment mid-turn).
         </p>
-        <Shot src="/vectortrack/screenshots/docs/line-toolbar.jpg" alt="Playback toolbar" caption="Playback bar: transport controls, speed, view mode, camera preset." />
+        <Shot src="/VectorTrack/screenshots/docs/line-toolbar.jpg" alt="Playback toolbar" caption="Playback bar: transport controls, speed, view mode, camera preset." />
         <p>
           <strong className="text-neutral-100">Telemetry</strong> — sim time, wheel speeds, a grayscale swatch per
           sensor reading, the current error, and the live P/I/D contribution breakdown, plus a scrolling
           error-vs-time sparkline for spotting oscillation as you tune.
         </p>
-        <Shot src="/vectortrack/screenshots/docs/line-telemetry.jpg" alt="Telemetry panel" caption="Telemetry strip: sensors, error, P/I/D terms, and the error sparkline." />
+        <Shot src="/VectorTrack/screenshots/docs/line-telemetry.jpg" alt="Telemetry panel" caption="Telemetry strip: sensors, error, P/I/D terms, and the error sparkline." />
         <p>
           <strong className="text-neutral-100">Settings</strong> (gear icon) — a sensor-overlay toggle for the 2D
           view, and a reset-all-progress action (behind a confirm step) that erases tuned gains, best times, and

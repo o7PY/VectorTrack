@@ -37,7 +37,7 @@ and what each telemetry readout means.
 git clone https://github.com/o7PY/VectorTrack.git
 cd VectorTrack
 npm install        # the only step that needs a network connection
-npm run dev         # dev server → http://localhost:5173/vectortrack/
+npm run dev         # dev server → http://localhost:5173/VectorTrack/
 ```
 
 Or build once and run fully offline from then on:
@@ -82,8 +82,9 @@ Vitest · oxlint
 
 GitHub Actions builds and deploys `dist/` to GitHub Pages on every push to `main`
 (`.github/workflows/deploy.yml`), running the full test suite first. The Vite `base` is set to
-`/vectortrack/` to match the Pages subpath, and routing uses a hash router (`#/...`) so it works
-from a static host with no server-side rewrites.
+`/VectorTrack/` to match the Pages subpath (this must exactly match the repo name's casing — GitHub
+Pages serves paths case-sensitively), and routing uses a hash router (`#/...`) so it works from a
+static host with no server-side rewrites.
 
 ## Process docs
 

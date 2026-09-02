@@ -67,7 +67,7 @@ else                    next = back(heading); // dead end`}
           other way around" looking shorter, because it commits to a path only once the whole reachable region
           near the goal has been mapped.
         </p>
-        <Shot src="/vectortrack/screenshots/docs/maze-algorithm.jpg" alt="Wall Follower algorithm panel" caption="Algorithm panel, Wall Follower selected — Hand is its one choice parameter." />
+        <Shot src="/VectorTrack/screenshots/docs/maze-algorithm.jpg" alt="Wall Follower algorithm panel" caption="Algorithm panel, Wall Follower selected — Hand is its one choice parameter." />
       </SubSection>
 
       <SubSection id="maze-robot" title="Robot">
@@ -79,7 +79,7 @@ else                    next = back(heading); // dead end`}
             ['Sprint', '150 mm', '60 mm', '600 mm/s', 'Faster but shorter-sighted.'],
           ]}
         />
-        <Shot src="/vectortrack/screenshots/docs/maze-robot.jpg" alt="Robot selection panel, maze mode" caption="Robot panel — sensor range is what actually differentiates these two in a maze." />
+        <Shot src="/VectorTrack/screenshots/docs/maze-robot.jpg" alt="Robot selection panel, maze mode" caption="Robot panel — sensor range is what actually differentiates these two in a maze." />
       </SubSection>
 
       <SubSection id="maze-map" title="Map">
@@ -101,8 +101,8 @@ else                    next = back(heading); // dead end`}
           exact location.
         </p>
         <div className="flex flex-wrap gap-4">
-          <Shot src="/vectortrack/screenshots/docs/maze-map-list.jpg" alt="Maze map list" caption="The five mazes, with wall-density thumbnails." />
-          <Shot src="/vectortrack/screenshots/docs/maze-map-canvas.jpg" alt="2D maze view" caption="First Steps in the 2D debug view — start (green), robot, goal (orange)." />
+          <Shot src="/VectorTrack/screenshots/docs/maze-map-list.jpg" alt="Maze map list" caption="The five mazes, with wall-density thumbnails." />
+          <Shot src="/VectorTrack/screenshots/docs/maze-map-canvas.jpg" alt="2D maze view" caption="First Steps in the 2D debug view — start (green), robot, goal (orange)." />
         </div>
       </SubSection>
 
@@ -112,7 +112,7 @@ else                    next = back(heading); // dead end`}
           and 2D/3D/camera-preset toggles as line-follower mode; in 3D the maze renders as extruded walls on a
           floor grid rather than a track plane.
         </p>
-        <Shot src="/vectortrack/screenshots/docs/maze-toolbar.jpg" alt="Playback toolbar, maze mode" caption="Same playback bar, maze mode — 3D view with the Isometric camera." />
+        <Shot src="/VectorTrack/screenshots/docs/maze-toolbar.jpg" alt="Playback toolbar, maze mode" caption="Same playback bar, maze mode — 3D view with the Isometric camera." />
         <p>
           <strong className="text-neutral-100">Telemetry</strong> — sim time, wheel speeds, front/left/right sensor
           distances, current cell, cells visited, and a human-readable algorithm phase. Flood fill's phase reads
@@ -120,7 +120,7 @@ else                    next = back(heading); // dead end`}
           phases — without it, deliberately backtracking to start after touching the goal once reads as a bug
           instead of the designed behavior.
         </p>
-        <Shot src="/vectortrack/screenshots/docs/maze-telemetry.jpg" alt="Telemetry panel, maze mode" caption="Telemetry strip: rangefinder distances, current cell, visited count, phase." />
+        <Shot src="/VectorTrack/screenshots/docs/maze-telemetry.jpg" alt="Telemetry panel, maze mode" caption="Telemetry strip: rangefinder distances, current cell, visited count, phase." />
       </SubSection>
     </>
   );

@@ -5,7 +5,7 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/vectortrack/',
+  base: '/VectorTrack/',
   plugins: [react(), tailwindcss()],
   test: {
     environment: 'node',
