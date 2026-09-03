@@ -8,22 +8,24 @@ const COLS = 16;
 // cells, no real decision-making once you know the way. 25 extra randomly-
 // opened walls turn it into a real labyrinth with loops, branches, and
 // multiple valid routes to the goal, so wall-following has actual junctions
-// to negotiate. The goal sits at the far bottom-right corner (diagonally
-// opposite start) rather than dead center, so reaching it is a genuine
-// corner-to-corner traversal, not a short hop to the middle — see
-// ISSUES.md #23/#24.
+// to negotiate. The goal is a real 2x2 region (v0.2.0 gives every maze a
+// MazeGoal region, not just a single cell) placed at the far bottom-right
+// corner rather than dead center, so reaching it stays a genuine
+// corner-to-corner traversal — see ISSUES.md #23/#24. Reverting to a literal
+// center goal (as an earlier draft of the v0.2.0 spec assumed) would have
+// silently undone that deliberate difficulty change.
 const cells = generatePerfectMaze(ROWS, COLS, 57);
 addRandomLoops(cells, ROWS, COLS, 27, 25);
 
 export const mzClassic: MazeMap = {
   id: 'mz-classic',
   name: 'Classic 16',
-  description: 'Micromouse-style, goal at the far corner, with looping shortcuts.',
+  description: 'Micromouse-style, 2x2 goal region at the far corner, with looping shortcuts.',
   rows: ROWS,
   cols: COLS,
   cellSize: 180,
   wallThickness: 12,
   cells,
   start: { row: 0, col: 0 },
-  goal: { row: ROWS - 1, col: COLS - 1 },
+  goal: { row: ROWS - 2, col: COLS - 2, width: 2, height: 2 },
 };

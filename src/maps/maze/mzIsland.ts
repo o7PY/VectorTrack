@@ -110,7 +110,7 @@ function build(): MazeMap {
     wallThickness: WALL_THICKNESS,
     cells,
     start,
-    goal,
+    goal: { ...goal, width: 1, height: 1 },
   };
 }
 

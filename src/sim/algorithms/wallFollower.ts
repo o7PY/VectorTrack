@@ -1,4 +1,5 @@
-import type { CardinalDir, Cell, MazeController } from '../core/types';
+import type { CardinalDir, Cell, MazeController, MazeGoal } from '../core/types';
+import { isInGoal } from '../maze/grid';
 import {
   CellMotionController,
   DIR_BACK,
@@ -15,7 +16,7 @@ type Mode = 'turn' | 'forward';
 export function createWallFollower(): MazeController {
   let cellSize = 0;
   let maxWheelSpeed = 0;
-  let goal: Cell = { row: 0, col: 0 };
+  let goal: MazeGoal = { row: 0, col: 0, width: 1, height: 1 };
   let motion: CellMotionController;
   let heading: CardinalDir = 1; // East
   let targetDir: CardinalDir = 1;
@@ -70,7 +71,7 @@ export function createWallFollower(): MazeController {
       currentCell = targetCell;
       visited.add(`${currentCell.row},${currentCell.col}`);
 
-      if (currentCell.row === goal.row && currentCell.col === goal.col) {
+      if (isInGoal(currentCell, goal)) {
         done = true;
         return { vLeft: 0, vRight: 0, debug: { cell: currentCell, phase: 'done', cellsVisited: visited.size } };
       }

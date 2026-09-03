@@ -15,6 +15,7 @@ import { getLineMap } from '../maps/line';
 import { rasterizeLineMap } from '../maps/line/rasterize';
 import { getMazeMap } from '../maps/maze';
 import { getLineRobot, getMazeRobot } from '../robots/definitions';
+import { isCustomRuntimeId, resolveCustomLineMap, resolveCustomMazeMap } from './customMapResolvers';
 
 export type EngineKind = 'line' | 'maze';
 
@@ -78,20 +79,32 @@ export function getLoop(): FixedStepLoop {
 
 export function buildLine(mapId: string, robotId: string, algorithmId: string): EngineSnapshot {
   kind = 'line';
-  const mapDef = getLineMap(mapId);
   const robot = getLineRobot(robotId);
-  let bitmap = bitmapCache.get(mapId);
-  if (!bitmap) {
-    bitmap = rasterizeLineMap(mapDef);
-    bitmapCache.set(mapId, bitmap);
+  let bitmap: LineBitmap | undefined;
+  let startPose: Pose2D;
+  let startRadius: number;
+  let pathLengthMm: number;
+  if (isCustomRuntimeId(mapId)) {
+    // Never cached: unlike built-ins, a custom map can be re-saved under the
+    // same id after an edit, so a stale cached bitmap would silently hide
+    // the change until a full page reload.
+    const source = resolveCustomLineMap(mapId);
+    bitmap = source.bitmap;
+    startPose = source.startPose;
+    startRadius = source.startRadiusMm;
+    pathLengthMm = source.pathLengthMm;
+  } else {
+    bitmap = bitmapCache.get(mapId);
+    const mapDef = getLineMap(mapId);
+    if (!bitmap) {
+      bitmap = rasterizeLineMap(mapDef);
+      bitmapCache.set(mapId, bitmap);
+    }
+    startPose = mapDef.startPose;
+    startRadius = mapDef.startRadiusMm;
+    pathLengthMm = mapDef.pathLengthMm;
   }
-  lineConfig = {
-    bitmap,
-    robot,
-    startPose: mapDef.startPose,
-    startRadius: mapDef.startRadiusMm,
-    pathLengthMm: mapDef.pathLengthMm,
-  };
+  lineConfig = { bitmap, robot, startPose, startRadius, pathLengthMm };
   lineController = makeLineController(algorithmId);
   lineController.reset();
   lineState = initLineRunState(lineConfig, robot.sensorCount);
@@ -101,7 +114,7 @@ export function buildLine(mapId: string, robotId: string, algorithmId: string): 
 
 export function buildMaze(mapId: string, robotId: string, algorithmId: string): EngineSnapshot {
   kind = 'maze';
-  const mapDef = getMazeMap(mapId);
+  const mapDef = isCustomRuntimeId(mapId) ? resolveCustomMazeMap(mapId) : getMazeMap(mapId);
   const robot = getMazeRobot(robotId);
   mazeConfig = {
     map: mapDef,

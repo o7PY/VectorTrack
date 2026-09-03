@@ -14,5 +14,5 @@ export const mzIntro: MazeMap = {
   wallThickness: 12,
   cells: generatePerfectMaze(ROWS, COLS, 4242),
   start: { row: 0, col: 0 },
-  goal: { row: ROWS - 1, col: COLS - 1 },
+  goal: { row: ROWS - 1, col: COLS - 1, width: 1, height: 1 },
 };

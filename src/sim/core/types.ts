@@ -19,6 +19,10 @@ export interface RobotSpec {
   maxWheelSpeed: number; // mm/s
   color: string; // hex, for rendering
   notes: string; // short blurb shown in the robot selection menu (SPEC 5.3)
+  // Validator-only geometry (v0.2.0 map maker's physical passability checks,
+  // MZP0x/LF0xx). Never read by the sim/kinematics/algorithms themselves —
+  // adding these must not change any v0.1.0 simulation behavior.
+  chassisWidthMm: number;
 }
 
 export interface LineRobotSpec extends RobotSpec {
@@ -27,6 +31,7 @@ export interface LineRobotSpec extends RobotSpec {
   sensorSpacing: number; // mm between adjacent sensors
   sensorForwardOffset: number; // mm ahead of the wheel axis
   sensorSampleRadius: number; // mm, disc radius sampled per sensor
+  sensorArraySpanMm: number; // validator-only: physical width the sensor array covers
 }
 
 export interface MazeRobotSpec extends RobotSpec {
@@ -79,6 +84,16 @@ export interface Cell {
   col: number;
 }
 
+// A goal is a rectangular region of cells, not necessarily a single cell —
+// (row,col) is its top-left cell. width/height are 1 or 2 (v0.2.0 map maker:
+// custom mazes let the author place a 1x1 or 2x2 goal).
+export interface MazeGoal {
+  row: number;
+  col: number;
+  width: 1 | 2;
+  height: 1 | 2;
+}
+
 export interface MazeSensorReading {
   front: number; // mm
   left: number; // mm
@@ -100,7 +115,7 @@ export interface MazeControllerContext {
   cols: number;
   cellSize: number;
   start: Cell;
-  goal: Cell;
+  goal: MazeGoal;
   maxWheelSpeed: number;
   wheelBase: number;
   sensorRange: number;

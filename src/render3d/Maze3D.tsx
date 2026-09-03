@@ -1,19 +1,22 @@
 import { useMemo } from 'react';
 import { getMazeMap } from '../maps/maze';
-import { buildWallSegments } from '../sim/maze/grid';
+import { buildWallSegments, goalCenterMm } from '../sim/maze/grid';
+import { isCustomRuntimeId, resolveCustomMazeMap } from '../store/customMapResolvers';
 import { MM_TO_M } from './coords';
 
 const WALL_HEIGHT = 0.09;
 
 export function Maze3D({ mapId }: { mapId: string }) {
-  const map = getMazeMap(mapId);
+  const map = useMemo(() => (isCustomRuntimeId(mapId) ? resolveCustomMazeMap(mapId) : getMazeMap(mapId)), [mapId]);
   const segments = useMemo(() => buildWallSegments(map), [map]);
   const worldW = map.cols * map.cellSize * MM_TO_M;
   const worldH = map.rows * map.cellSize * MM_TO_M;
   const wallThickness = map.wallThickness * MM_TO_M;
 
   const startCenter: [number, number] = [(map.start.col + 0.5) * map.cellSize * MM_TO_M, (map.start.row + 0.5) * map.cellSize * MM_TO_M];
-  const goalCenter: [number, number] = [(map.goal.col + 0.5) * map.cellSize * MM_TO_M, (map.goal.row + 0.5) * map.cellSize * MM_TO_M];
+  const goalMm = goalCenterMm(map.goal, map.cellSize);
+  const goalCenter: [number, number] = [goalMm.x * MM_TO_M, goalMm.y * MM_TO_M];
+  const goalRadius = map.cellSize * MM_TO_M * 0.18 * Math.max(map.goal.width, map.goal.height);
 
   return (
     <group>
@@ -45,7 +48,7 @@ export function Maze3D({ mapId }: { mapId: string }) {
         <meshStandardMaterial color="#22c55e" />
       </mesh>
       <mesh position={[goalCenter[0], 0.002, goalCenter[1]]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[map.cellSize * MM_TO_M * 0.18, 24]} />
+        <circleGeometry args={[goalRadius, 24]} />
         <meshStandardMaterial color="#f59e0b" />
       </mesh>
     </group>

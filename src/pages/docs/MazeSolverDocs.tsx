@@ -90,7 +90,7 @@ else                    next = back(heading); // dead end`}
             ['First Steps', 'Sparse walls, wall-follower solves easily.'],
             ['Spiral', 'Single long spiral path to center.'],
             ['Island', 'A perimeter ring with one interior doorway — hand-on-wall following circles it forever; flood fill\'s global knowledge finds the doorway.'],
-            ['Classic 16', 'Micromouse-style, goal at the center 2×2.'],
+            ['Classic 16', 'Micromouse-style, 2×2 goal region at the far corner, with looping shortcuts.'],
             ['Dense Grid', 'Many junctions and dead ends.'],
           ]}
         />

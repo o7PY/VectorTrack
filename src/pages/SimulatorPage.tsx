@@ -13,6 +13,7 @@ import { ResultBanner } from '../ui/ResultBanner';
 import { SettingsButton } from '../ui/SettingsButton';
 import { Canvas2D } from '../render2d/Canvas2D';
 import { Scene3D } from '../render3d/Scene3D';
+import Logo from '../ui/Logo';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -31,15 +32,21 @@ export default function SimulatorPage() {
     <div className="flex h-screen w-screen flex-col bg-neutral-950 text-neutral-100">
       <header className="flex items-center justify-between border-b border-neutral-800 px-4 py-2.5">
         <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-1.5 text-base font-bold tracking-tight hover:text-sky-400">
-            <span aria-hidden className="text-sky-500">
-              ▸
-            </span>
+          <Link to="/" className="flex items-center gap-2 text-base font-bold tracking-tight hover:text-sky-400">
+            <Logo className="h-6 w-6 rounded-md" />
             VectorTrack
           </Link>
           <ModeTabs />
         </div>
-        <SettingsButton />
+        <div className="flex items-center gap-3">
+          <Link
+            to="/editor"
+            className="rounded-md border border-neutral-800 px-3 py-1.5 text-sm text-sky-400 hover:border-neutral-700 hover:text-sky-300"
+          >
+            Map Maker
+          </Link>
+          <SettingsButton />
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">

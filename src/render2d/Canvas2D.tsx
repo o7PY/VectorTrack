@@ -2,25 +2,28 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { getLineMap } from '../maps/line';
 import { getMazeMap } from '../maps/maze';
-import { buildWallSegments } from '../sim/maze/grid';
+import type { LineBitmap } from '../sim/sensors/reflectance';
+import { buildWallSegments, goalCenterMm } from '../sim/maze/grid';
 import { getLineRobot, getMazeRobot } from '../robots/definitions';
+import { isCustomRuntimeId, resolveCustomLineMap, resolveCustomMazeMap } from '../store/customMapResolvers';
+import { computeTransform, toScreen } from './transform';
 
-interface Transform {
-  scale: number;
-  offsetX: number;
-  offsetY: number;
-}
-
-function computeTransform(canvasW: number, canvasH: number, worldW: number, worldH: number): Transform {
-  const pad = 24;
-  const scale = Math.min((canvasW - pad * 2) / worldW, (canvasH - pad * 2) / worldH);
-  const offsetX = (canvasW - worldW * scale) / 2;
-  const offsetY = (canvasH - worldH * scale) / 2;
-  return { scale, offsetX, offsetY };
-}
-
-function toScreen(t: Transform, x: number, y: number): [number, number] {
-  return [t.offsetX + x * t.scale, t.offsetY + y * t.scale];
+/** White floor, black line — rendered as a raster image since a custom track has no vector centerline. */
+function bitmapToImageBitmapCanvas(bitmap: LineBitmap): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(bitmap.width, bitmap.height);
+  for (let i = 0; i < bitmap.width * bitmap.height; i++) {
+    const v = 255 - bitmap.data[i];
+    img.data[i * 4] = v;
+    img.data[i * 4 + 1] = v;
+    img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
 }
 
 export function Canvas2D() {
@@ -36,6 +39,7 @@ export function Canvas2D() {
   const mazeTelemetry = useStore((s) => s.mazeTelemetry);
   const showSensorOverlay = useStore((s) => s.showSensorOverlay);
   const [, forceResize] = useState(0);
+  const customBitmapCanvasRef = useRef<{ mapId: string; canvas: HTMLCanvasElement } | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -65,29 +69,47 @@ export function Canvas2D() {
     ctx.fillRect(0, 0, w, h);
 
     if (mode === 'line') {
-      const map = getLineMap(mapId);
       const robot = getLineRobot(robotId);
-      const t = computeTransform(w, h, map.widthMm, map.heightMm);
+      const isCustom = isCustomRuntimeId(mapId);
+      const builtin = isCustom ? null : getLineMap(mapId);
+      const custom = isCustom ? resolveCustomLineMap(mapId) : null;
+      const widthMm = builtin ? builtin.widthMm : custom!.bitmap.width * custom!.bitmap.mmPerPixel;
+      const heightMm = builtin ? builtin.heightMm : custom!.bitmap.height * custom!.bitmap.mmPerPixel;
+      const startPose = builtin ? builtin.startPose : custom!.startPose;
+      const startRadiusMm = builtin ? builtin.startRadiusMm : custom!.startRadiusMm;
+      const t = computeTransform(w, h, widthMm, heightMm);
 
       // Track
-      ctx.strokeStyle = '#27272a';
-      ctx.lineWidth = Math.max(1, map.trackWidthMm * t.scale);
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      map.points.forEach((p, i) => {
-        const [sx, sy] = toScreen(t, p.x, p.y);
-        if (i === 0) ctx.moveTo(sx, sy);
-        else ctx.lineTo(sx, sy);
-      });
-      ctx.closePath();
-      ctx.stroke();
+      if (builtin) {
+        ctx.strokeStyle = '#27272a';
+        ctx.lineWidth = Math.max(1, builtin.trackWidthMm * t.scale);
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        builtin.points.forEach((p, i) => {
+          const [sx, sy] = toScreen(t, p.x, p.y);
+          if (i === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        });
+        ctx.closePath();
+        ctx.stroke();
+      } else {
+        // Custom tracks have no vector centerline — render the painted
+        // bitmap directly as a white-floor/black-line raster, matching a
+        // real reflectance sensor's view.
+        if (customBitmapCanvasRef.current?.mapId !== mapId) {
+          customBitmapCanvasRef.current = { mapId, canvas: bitmapToImageBitmapCanvas(custom!.bitmap) };
+        }
+        const [ox, oy] = toScreen(t, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(customBitmapCanvasRef.current.canvas, ox, oy, widthMm * t.scale, heightMm * t.scale);
+      }
 
       // Start marker
-      const [ssx, ssy] = toScreen(t, map.startPose.x, map.startPose.y);
+      const [ssx, ssy] = toScreen(t, startPose.x, startPose.y);
       ctx.strokeStyle = '#22c55e';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(ssx, ssy, map.startRadiusMm * t.scale, 0, Math.PI * 2);
+      ctx.arc(ssx, ssy, startRadiusMm * t.scale, 0, Math.PI * 2);
       ctx.stroke();
 
       // Trail
@@ -142,7 +164,7 @@ export function Canvas2D() {
         });
       }
     } else {
-      const map = getMazeMap(mapId);
+      const map = isCustomRuntimeId(mapId) ? resolveCustomMazeMap(mapId) : getMazeMap(mapId);
       const robot = getMazeRobot(robotId);
       const worldW = map.cols * map.cellSize;
       const worldH = map.rows * map.cellSize;
@@ -188,10 +210,11 @@ export function Canvas2D() {
       ctx.beginPath();
       ctx.arc(startCenter[0], startCenter[1], map.cellSize * t.scale * 0.15, 0, Math.PI * 2);
       ctx.fill();
-      const goalCenter = toScreen(t, (map.goal.col + 0.5) * map.cellSize, (map.goal.row + 0.5) * map.cellSize);
+      const goalMm = goalCenterMm(map.goal, map.cellSize);
+      const goalCenter = toScreen(t, goalMm.x, goalMm.y);
       ctx.fillStyle = '#f59e0b';
       ctx.beginPath();
-      ctx.arc(goalCenter[0], goalCenter[1], map.cellSize * t.scale * 0.15, 0, Math.PI * 2);
+      ctx.arc(goalCenter[0], goalCenter[1], map.cellSize * t.scale * 0.15 * Math.max(map.goal.width, map.goal.height), 0, Math.PI * 2);
       ctx.fill();
 
       // Trail

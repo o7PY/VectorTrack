@@ -15,5 +15,5 @@ export const mzSpiral: MazeMap = {
   wallThickness: 12,
   cells,
   start,
-  goal,
+  goal: { ...goal, width: 1, height: 1 },
 };

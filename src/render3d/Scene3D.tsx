@@ -4,6 +4,7 @@ import { useStore } from '../store/useStore';
 import { getLineMap } from '../maps/line';
 import { getMazeMap } from '../maps/maze';
 import { getLineRobot, getMazeRobot } from '../robots/definitions';
+import { isCustomRuntimeId, resolveCustomLineMap, resolveCustomMazeMap } from '../store/customMapResolvers';
 import { MM_TO_M } from './coords';
 import { LineTrack3D } from './LineTrack3D';
 import { Maze3D } from './Maze3D';
@@ -20,10 +21,14 @@ export function Scene3D() {
 
   const center = useMemo<[number, number]>(() => {
     if (mode === 'line') {
+      if (isCustomRuntimeId(mapId)) {
+        const custom = resolveCustomLineMap(mapId);
+        return [custom.bitmap.width * custom.bitmap.mmPerPixel * MM_TO_M * 0.5, custom.bitmap.height * custom.bitmap.mmPerPixel * MM_TO_M * 0.5];
+      }
       const m = getLineMap(mapId);
       return [m.widthMm * MM_TO_M * 0.5, m.heightMm * MM_TO_M * 0.5];
     }
-    const m = getMazeMap(mapId);
+    const m = isCustomRuntimeId(mapId) ? resolveCustomMazeMap(mapId) : getMazeMap(mapId);
     return [m.cols * m.cellSize * MM_TO_M * 0.5, m.rows * m.cellSize * MM_TO_M * 0.5];
   }, [mode, mapId]);
 

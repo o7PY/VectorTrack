@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { TrackAnimation } from './home/TrackAnimation';
 import { MazeDiagram } from './home/MazeDiagram';
 import { ScreenshotFrame } from './home/ScreenshotFrame';
+import Logo from '../ui/Logo';
 
 const REPO_URL = 'https://github.com/o7PY/VectorTrack';
 
@@ -26,10 +27,8 @@ function Nav() {
   return (
     <header className="sticky top-0 z-20 border-b border-neutral-800 bg-neutral-950/85 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-        <span className="flex items-center gap-1.5 text-base font-bold tracking-tight">
-          <span aria-hidden className="text-sky-500">
-            ▸
-          </span>
+        <span className="flex items-center gap-2 text-base font-bold tracking-tight">
+          <Logo className="h-6 w-6 rounded-md" />
           VectorTrack
         </span>
         <nav className="hidden items-center gap-6 text-sm text-neutral-400 sm:flex">
@@ -41,6 +40,9 @@ function Nav() {
           </button>
           <Link to="/docs" className="hover:text-neutral-100">
             Docs
+          </Link>
+          <Link to="/editor" className="hover:text-neutral-100">
+            Map Maker
           </Link>
           <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-neutral-100">
             <GithubMark />
@@ -63,7 +65,7 @@ function Hero() {
     <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-6 py-20 sm:py-28 lg:grid-cols-[1.1fr_1fr] lg:gap-6">
       <div>
         <span className="inline-block rounded border border-neutral-800 bg-neutral-900 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide text-neutral-500">
-          v0.1.0
+          v0.2.0
         </span>
         <h1 className="mt-5 text-4xl font-bold leading-[1.1] tracking-tight text-neutral-50 sm:text-5xl">
           Tune the controller.
@@ -202,6 +204,16 @@ const FEATURES: Feature[] = [
     body: 'A fixed 120 Hz physics step, decoupled from render rate. Same map, robot, algorithm, and gains always produce the identical trajectory, every time you reload.',
     screenshot: { src: '/VectorTrack/screenshots/maze-solver-3d.jpg', path: 'VectorTrack/#/simulator', caption: 'Extruded maze walls in the 3D isometric view.' },
   },
+  {
+    title: 'Build your own maze',
+    body: 'A Map Maker lets you choose a grid size and cell resolution, paint a custom wall grid (zoom in for precision), place a resizable goal region, and validate it live — an unreachable region, an enclosed start, or a corridor too narrow for the selected robot are flagged before you can save. Export a map as JSON to share it, or import one someone else made.',
+    screenshot: { src: '/VectorTrack/screenshots/map-maker-maze.jpg', path: 'VectorTrack/#/editor/maze/new', caption: 'The maze editor — drag to paint walls, place start/goal, live validation panel.' },
+  },
+  {
+    title: 'Paint your own line track',
+    body: 'A pixel-art-style editor for line tracks on a white floor with a black line, matching what a real reflectance sensor sees: pencil, line, rectangle, and ellipse tools on an author-chosen grid resolution down to 10 mm, zoomable for precision, with live validation for a disconnected track, a missing start marker, or a lap too short to detect reliably. Custom tracks — maze or line — run in the simulator exactly like a built-in map.',
+    screenshot: { src: '/VectorTrack/screenshots/map-maker-line.jpg', path: 'VectorTrack/#/editor/line/new', caption: 'The line editor — painting a track on a white/black grid, with live validation.' },
+  },
 ];
 
 function Features() {
@@ -229,7 +241,7 @@ function Footer() {
   return (
     <footer className="border-t border-neutral-800">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-8 text-sm text-neutral-500">
-        <span>VectorTrack v0.1.0 — a kinematic simulator.</span>
+        <span>VectorTrack v0.2.0 — a kinematic simulator.</span>
         <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-neutral-300">
           <GithubMark />
           Source on GitHub

@@ -6,6 +6,9 @@ import HomePage from './pages/HomePage';
 // zustand store) never initializes just from visiting the homepage.
 const SimulatorPage = lazy(() => import('./pages/SimulatorPage'));
 const DocsPage = lazy(() => import('./pages/DocsPage'));
+const EditorPage = lazy(() => import('./pages/EditorPage'));
+const MazeEditorPage = lazy(() => import('./pages/editor/MazeEditorPage'));
+const LineEditorPage = lazy(() => import('./pages/editor/LineEditorPage'));
 
 function LazyFallback({ label }: { label: string }) {
   return (
@@ -33,6 +36,30 @@ export default function App() {
           element={
             <Suspense fallback={<LazyFallback label="Loading docs…" />}>
               <DocsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/editor"
+          element={
+            <Suspense fallback={<LazyFallback label="Loading editor…" />}>
+              <EditorPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/editor/maze/:id"
+          element={
+            <Suspense fallback={<LazyFallback label="Loading maze editor…" />}>
+              <MazeEditorPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/editor/line/:id"
+          element={
+            <Suspense fallback={<LazyFallback label="Loading line editor…" />}>
+              <LineEditorPage />
             </Suspense>
           }
         />

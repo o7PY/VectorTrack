@@ -157,7 +157,7 @@ export const useStore = create<StoreState>((set, get) => {
   function persist(): void {
     const s = get();
     const data: SaveData = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       lastSession: { mode: s.mode, mapId: s.mapId, robotId: s.robotId, algorithmId: s.algorithmId },
       tunedParams: s.tunedParams,
       bestRuns: s.bestRuns,

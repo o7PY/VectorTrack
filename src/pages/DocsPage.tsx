@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { CodeBlock, SectionHeading, SubSection } from './docs/DocsShared';
 import { LineFollowerDocs } from './docs/LineFollowerDocs';
 import { MazeSolverDocs } from './docs/MazeSolverDocs';
+import { MapMakerDocs } from './docs/MapMakerDocs';
+import Logo from '../ui/Logo';
 
 // HashRouter owns the URL hash for routing — an <a href="#id"> anchor would
 // be read as a route change and blank the page. Scroll via the DOM instead.
@@ -30,6 +32,19 @@ const TOC: { id: string; label: string; children?: { id: string; label: string }
       { id: 'maze-robot', label: 'Robot' },
       { id: 'maze-map', label: 'Map' },
       { id: 'maze-utility', label: 'Utility' },
+    ],
+  },
+  {
+    id: 'map-maker',
+    label: 'Map Maker',
+    children: [
+      { id: 'map-maker-list', label: 'My Maps' },
+      { id: 'map-maker-maze-editor', label: 'Maze editor' },
+      { id: 'map-maker-line-editor', label: 'Line editor' },
+      { id: 'map-maker-validation', label: 'Validation' },
+      { id: 'map-maker-import-export', label: 'Import / export' },
+      { id: 'map-maker-simulator', label: 'Running custom maps' },
+      { id: 'map-maker-ai-generation', label: 'AI map generation' },
     ],
   },
 ];
@@ -107,10 +122,8 @@ function Nav() {
   return (
     <header className="sticky top-0 z-20 border-b border-neutral-800 bg-neutral-950/85 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-        <Link to="/" className="flex items-center gap-1.5 text-base font-bold tracking-tight hover:text-sky-400">
-          <span aria-hidden className="text-sky-500">
-            ▸
-          </span>
+        <Link to="/" className="flex items-center gap-2 text-base font-bold tracking-tight hover:text-sky-400">
+          <Logo className="h-6 w-6 rounded-md" />
           VectorTrack
           <span className="ml-1.5 rounded border border-neutral-800 bg-neutral-900 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-neutral-500">
             Docs
@@ -159,8 +172,8 @@ while (accumulator >= DT) {
         <p>
           Every robot is a differential-drive chassis: two independently-driven wheels, no slip, no acceleration
           ramp. Wheel speeds are clamped to <code>±maxWheelSpeed</code>, then integrated straight into pose each
-          tick — a deliberate simplification (SPEC §2) in favor of a fully deterministic, easy-to-reason-about
-          simulation over a physically exhaustive one:
+          tick — a kinematic model chosen deliberately for a fully deterministic, easy-to-reason-about simulation
+          over a physically exhaustive one:
         </p>
         <CodeBlock
           title="src/sim/core/kinematics.ts (concept)"
@@ -192,8 +205,11 @@ theta += omega * dt;`}
       <SubSection id="simulator-persistence" title="Persistence">
         <p>
           Tuned gains, best times, and map-completion state are written to <code>localStorage</code> under a
-          versioned <code>vectortrack.v1</code> schema, debounced 500ms after the last change, with a corrupt-data
-          fallback to defaults. A confirm-gated "reset all progress" action clears it entirely.
+          versioned <code>vectortrack.v2</code> schema, debounced 500ms after the last change, with a corrupt-data
+          fallback to defaults (an older <code>vectortrack.v1</code> save is migrated in place on first load). A
+          confirm-gated "reset all progress" action clears it entirely. Custom maps built in the{' '}
+          <Link to="/editor" className="text-sky-400 hover:underline">Map Maker</Link> live under a separate{' '}
+          <code>vectortrack.maps.v1</code> key with its own lifecycle, so resetting progress never touches them.
         </p>
       </SubSection>
 
@@ -231,6 +247,7 @@ export default function DocsPage() {
           <SimulatorOverview />
           <LineFollowerDocs />
           <MazeSolverDocs />
+          <MapMakerDocs />
         </main>
       </div>
     </div>

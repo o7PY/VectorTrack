@@ -27,9 +27,21 @@ identical state — a 2D debug canvas (sensor rays, trajectory trail) and a full
 anything. Tuned gains, best times, and per-map completion are saved to `localStorage` and survive
 a reload.
 
+**Map Maker** — a custom editor (`#/editor`) for both maze and line tracks: pick a canvas size (and,
+for line tracks, a cell resolution), then paint walls or a line grid on a zoomable canvas (scroll to
+zoom toward the cursor, drag to pan), place the start/goal, and get live validation as you edit (an
+unreachable goal, a disconnected track, a corridor too narrow for the selected robot, and more, each
+flagged with its own rule code). The line editor uses a white floor / black line theme, matching a
+real reflectance sensor. Custom maps are saved to `localStorage`, exportable/importable as JSON,
+and fully runnable in the simulator right alongside the ten built-in maps — same playback,
+telemetry, and best-times tracking, selected from a thumbnail dropdown next to the built-in map
+picker. An AI can generate a map for you, too — the Map Maker's "My Maps" page links straight to
+[`SKILL.md`](public/skills/vectortrack-map-generator/SKILL.md), which documents the full map JSON
+schema and rules, installable as a Claude skill or usable as plain context for any AI model.
+
 The app's own `/docs` route (`npm run dev` then open `#/docs`) is the full technical
 breakdown — every algorithm's source excerpt, every robot's spec table, every map's construction,
-and what each telemetry readout means.
+the Map Maker's validation rules, and what each telemetry readout means.
 
 ## Running locally
 
@@ -61,17 +73,21 @@ npm run build       # tsc -b && vite build
 src/
   sim/        # pure TS simulation core — kinematics, sensors, algorithms. No DOM/React/Three imports.
   maps/       # line-track and maze content (procedurally generated, deterministic per seed)
+              # maps/custom/ — user-authored map storage + conversion into the sim's runtime shapes
   robots/     # robot spec definitions
   algorithms/ # UI-facing algorithm/param metadata
   store/      # Zustand store, persistence, and the non-serializable sim engine instance
-  render2d/   # Canvas 2D renderer (debug view)
+  editor/     # Map Maker: maze + line editors (paint/draft logic, validation rules, undo stack)
+  render2d/   # Canvas 2D renderer (debug view), shared world-mm <-> screen-px transform
   render3d/   # React Three Fiber renderer (default view)
   ui/         # simulator panels and controls
-  pages/      # top-level routes: HomePage (marketing), SimulatorPage (the app), DocsPage (reference)
+  pages/      # top-level routes: HomePage (marketing), SimulatorPage (the app), DocsPage (reference),
+              # EditorPage + editor/MazeEditorPage + editor/LineEditorPage (Map Maker)
 ```
 
-The simulator and docs page are each lazy-loaded behind their own client-side route (`#/simulator`,
-`#/docs`), so visiting the homepage never pays for Three.js or the sim engine.
+The simulator, docs page, and both map editors are each lazy-loaded behind their own client-side
+route (`#/simulator`, `#/docs`, `#/editor/maze/:id`, `#/editor/line/:id`), so visiting the homepage
+never pays for Three.js or the sim engine.
 
 ## Tech stack
 
