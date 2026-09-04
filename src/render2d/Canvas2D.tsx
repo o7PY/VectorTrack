@@ -2,29 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { getLineMap } from '../maps/line';
 import { getMazeMap } from '../maps/maze';
-import type { LineBitmap } from '../sim/sensors/reflectance';
 import { buildWallSegments, goalCenterMm } from '../sim/maze/grid';
 import { getLineRobot, getMazeRobot } from '../robots/definitions';
 import { isCustomRuntimeId, resolveCustomLineMap, resolveCustomMazeMap } from '../store/customMapResolvers';
 import { computeTransform, toScreen } from './transform';
-
-/** White floor, black line — rendered as a raster image since a custom track has no vector centerline. */
-function bitmapToImageBitmapCanvas(bitmap: LineBitmap): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const ctx = canvas.getContext('2d')!;
-  const img = ctx.createImageData(bitmap.width, bitmap.height);
-  for (let i = 0; i < bitmap.width * bitmap.height; i++) {
-    const v = 255 - bitmap.data[i];
-    img.data[i * 4] = v;
-    img.data[i * 4 + 1] = v;
-    img.data[i * 4 + 2] = v;
-    img.data[i * 4 + 3] = 255;
-  }
-  ctx.putImageData(img, 0, 0);
-  return canvas;
-}
+import { bitmapToImageBitmapCanvas } from './bitmapCanvas';
 
 export function Canvas2D() {
   const canvasRef = useRef<HTMLCanvasElement>(null);

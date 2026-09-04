@@ -205,8 +205,9 @@ theta += omega * dt;`}
       <SubSection id="simulator-persistence" title="Persistence">
         <p>
           Tuned gains, best times, and map-completion state are written to <code>localStorage</code> under a
-          versioned <code>vectortrack.v2</code> schema, debounced 500ms after the last change, with a corrupt-data
-          fallback to defaults (an older <code>vectortrack.v1</code> save is migrated in place on first load). A
+          versioned <code>vectortrack.v3</code> schema, debounced 500ms after the last change, with a corrupt-data
+          fallback to defaults (an older <code>vectortrack.v1</code> or <code>vectortrack.v2</code> save is migrated
+          in place on first load). A
           confirm-gated "reset all progress" action clears it entirely. Custom maps built in the{' '}
           <Link to="/editor" className="text-sky-400 hover:underline">Map Maker</Link> live under a separate{' '}
           <code>vectortrack.maps.v1</code> key with its own lifecycle, so resetting progress never touches them.

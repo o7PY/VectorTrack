@@ -10,8 +10,8 @@ export function createBangBang(): LineController {
     reset() {
       lastError = 0;
     },
-    step(sensors, _dt, _params, _baseSpeed, maxWheelSpeed) {
-      const error = computeLineError(sensors, lastError);
+    step(sensors, _dt, _params, _baseSpeed, maxWheelSpeed, _wheelBase, sensorLateralMm) {
+      const error = computeLineError(sensors, lastError, sensorLateralMm);
       lastError = error;
 
       const turn = maxWheelSpeed * 0.6;

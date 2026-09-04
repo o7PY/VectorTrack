@@ -72,7 +72,15 @@ export interface LineControllerOutput extends WheelCommand {
 export interface LineController {
   id: string;
   reset(): void;
-  step(sensors: number[], dt: number, params: Record<string, number>, baseSpeed: number, maxWheelSpeed: number, wheelBase: number): LineControllerOutput;
+  step(
+    sensors: number[],
+    dt: number,
+    params: Record<string, number>,
+    baseSpeed: number,
+    maxWheelSpeed: number,
+    wheelBase: number,
+    sensorLateralMm: number[],
+  ): LineControllerOutput;
 }
 
 // ---- Maze solver ----

@@ -2,6 +2,7 @@ import { stepKinematics } from '../core/kinematics';
 import type { MazeController, MazeControllerDebug, MazeRobotSpec, Pose2D, RunStatus } from '../core/types';
 import { distanceToNearestWall, sampleMazeSensors } from '../sensors/rangefinder';
 import type { WallSegment } from '../sensors/rangefinder';
+import type { SensorPlacement } from '../sensors/placement';
 import type { MazeMap } from '../maze/grid';
 import { cellCenter } from '../algorithms/mazeMotion';
 
@@ -11,6 +12,8 @@ export interface MazeRunConfig {
   robot: MazeRobotSpec;
   timeLimitS: number;
   collisionRadius: number; // mm, distance-to-wall below which counts as a collision
+  /** Custom front/left/right overrides only (Algorithms.md §2.4); omitted for a robot's default layout. */
+  sensorPlacements?: SensorPlacement[];
 }
 
 export interface MazeRunState {
@@ -45,7 +48,14 @@ export function tickMaze(
 ): MazeRunState {
   if (state.status.outcome === 'success' || state.status.outcome === 'failed') return state;
 
-  const sensors = sampleMazeSensors(state.pose.x, state.pose.y, state.pose.theta, config.robot.sensorRange, config.segments);
+  const sensors = sampleMazeSensors(
+    state.pose.x,
+    state.pose.y,
+    state.pose.theta,
+    config.robot.sensorRange,
+    config.segments,
+    config.sensorPlacements,
+  );
   const out = controller.step(sensors, state.pose, dt, params);
   const newPose = stepKinematics(state.pose, out, config.robot.wheelBase, config.robot.maxWheelSpeed, dt);
   const simTime = state.simTime + dt;

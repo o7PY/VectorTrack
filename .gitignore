@@ -24,15 +24,7 @@ dist-ssr
 *.sw?
 
 # Dev-process docs (not shipped product docs)
-SPEC.md
-Simulation.md
-Homepage.md
-Documentation.md
-Mapmaker.md
-PLAN.md
-ISSUES.md
-INSIGHTS.md
-v0.2.0.md
+internal-docs/
 
 # Local AI tooling config/cache (not project source)
 .claude/

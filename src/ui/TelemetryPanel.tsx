@@ -31,11 +31,15 @@ export function TelemetryPanel() {
   const vRight = useStore((s) => s.vRight);
   const lineTelemetry = useStore((s) => s.lineTelemetry);
   const mazeTelemetry = useStore((s) => s.mazeTelemetry);
+  const vtlError = useStore((s) => s.vtlError);
 
   const speed = (vLeft + vRight) / 2;
 
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-neutral-800 bg-neutral-950 px-3 py-2 text-xs text-neutral-300 sm:grid-cols-4">
+      {vtlError && (
+        <div className="col-span-2 rounded border border-red-900/60 bg-red-950/30 px-2 py-1 font-mono text-red-300 sm:col-span-4">{vtlError}</div>
+      )}
       <div>
         <div className="text-neutral-500">t</div>
         <div className="font-mono">{simTime.toFixed(1)}s</div>

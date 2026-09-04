@@ -1,11 +1,18 @@
 import { FixedStepLoop } from '../sim/core/loop';
-import type { LineController, MazeController, Pose2D, RunStatus } from '../sim/core/types';
+import type { LineController, LineRobotSpec, MazeController, MazeRobotSpec, Pose2D, RunStatus } from '../sim/core/types';
 import type { LineBitmap } from '../sim/sensors/reflectance';
+import type { SensorPlacement } from '../sim/sensors/placement';
+import { orderSensorsLeftToRight } from '../sim/sensors/placement';
 import { createBangBang } from '../sim/algorithms/bangBang';
 import { createProportional } from '../sim/algorithms/proportional';
 import { createPid } from '../sim/algorithms/pid';
 import { createWallFollower } from '../sim/algorithms/wallFollower';
 import { createFloodFill } from '../sim/algorithms/floodFill';
+import { createVtlLineController } from '../sim/algorithms/vtlAdapter';
+import type { VtlLineController } from '../sim/algorithms/vtlAdapter';
+import { createVtlMazeController } from '../sim/algorithms/vtlMazeAdapter';
+import type { VtlMazeController } from '../sim/algorithms/vtlMazeAdapter';
+import type { Program } from '../vtl/types';
 import { initLineRunState, tickLine } from '../sim/runners/lineRunner';
 import type { LineRunConfig, LineRunState } from '../sim/runners/lineRunner';
 import { initMazeRunState, tickMaze } from '../sim/runners/mazeRunner';
@@ -15,7 +22,40 @@ import { getLineMap } from '../maps/line';
 import { rasterizeLineMap } from '../maps/line/rasterize';
 import { getMazeMap } from '../maps/maze';
 import { getLineRobot, getMazeRobot } from '../robots/definitions';
+import { defaultLineLayout } from '../robots/layouts';
 import { isCustomRuntimeId, resolveCustomLineMap, resolveCustomMazeMap } from './customMapResolvers';
+import { isVtlRuntimeId, isSensorLayoutRuntimeId, resolveCompiledCustomAlgorithm, resolveCustomSensorLayout } from './customAlgorithmResolvers';
+
+// Resolves `layoutId` to left-to-right-ordered reflectance placements. `layoutId === robot.id`
+// (the default — also every pre-Phase-J caller) reproduces `robot`'s fixed geometry exactly, so
+// existing runs see zero behavioral change. A missing/corrupt custom layout, or one with no
+// reflectance sensors, falls back to the default silently — same "corrupt data discarded
+// silently" convention as store/customMaps.ts, since SP001 already blocks saving an empty layout
+// from the editor in the first place.
+export function resolveLineSensorPlacements(robot: LineRobotSpec, layoutId: string): SensorPlacement[] {
+  if (layoutId !== robot.id && isSensorLayoutRuntimeId(layoutId)) {
+    try {
+      const reflectance = resolveCustomSensorLayout(layoutId).sensors.filter((s) => s.type === 'reflectance');
+      if (reflectance.length > 0) return orderSensorsLeftToRight(reflectance);
+    } catch {
+      // fall through to the default layout below
+    }
+  }
+  return defaultLineLayout(robot).sensors;
+}
+
+// Maze mode only ever lets a custom layout override the front/left/right roles (Algorithms.md
+// §2.4) — `undefined` here means "use the robot's fixed origin-mounted rangefinders," the exact
+// pre-Phase-J `sampleMazeSensors` behavior.
+export function resolveMazeSensorPlacements(robot: MazeRobotSpec, layoutId: string): SensorPlacement[] | undefined {
+  if (layoutId === robot.id || !isSensorLayoutRuntimeId(layoutId)) return undefined;
+  try {
+    const rangefinders = resolveCustomSensorLayout(layoutId).sensors.filter((s) => s.type === 'rangefinder');
+    return rangefinders.length > 0 ? rangefinders : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export type EngineKind = 'line' | 'maze';
 
@@ -38,6 +78,8 @@ export interface EngineSnapshot {
     cellsVisited: number;
     phase: string;
   };
+  /** Set once a `vtl:${id}` algorithm's `on tick`/`on junction` throws a VtlRuntimeHalt; cleared on the next build(). */
+  vtlError?: string;
 }
 
 const loop = new FixedStepLoop();
@@ -50,8 +92,42 @@ let mazeConfig: MazeRunConfig | null = null;
 let lineState: LineRunState | null = null;
 let mazeState: MazeRunState | null = null;
 let bitmapCache: Map<string, LineBitmap> = new Map();
+let vtlError: string | null = null;
+let currentAlgorithmId: string | null = null;
 
-function makeLineController(algorithmId: string): LineController {
+function onVtlHalt(halt: { code: string; message: string; line: number }): void {
+  vtlError = `${halt.code} (line ${halt.line}): ${halt.message}`;
+}
+
+// A saved custom algorithm's source is expected to compile (customAlgorithmResolvers.ts's
+// doc-comment), but the *editor* may later save a broken draft, or storage may have been edited by
+// hand — so a resolve/compile failure at build time must degrade to an inert controller with a
+// visible error rather than throwing through rebuild() and crashing the store (Algorithms.md §6:
+// "a compile failure ... shows the error and refuses to start").
+function brokenLineController(message: string): LineController {
+  vtlError = message;
+  return { id: 'vtl-broken', reset() {}, step: () => ({ vLeft: 0, vRight: 0, debug: { error: 0, p: 0, i: 0, d: 0 } }) };
+}
+
+function brokenMazeController(message: string): MazeController {
+  vtlError = message;
+  return {
+    id: 'vtl-broken',
+    reset() {},
+    step: () => ({ vLeft: 0, vRight: 0, debug: { cell: { row: 0, col: 0 }, phase: 'halted', cellsVisited: 0 } }),
+    isDone: () => false,
+  };
+}
+
+function makeLineController(algorithmId: string, sensorPlacements: SensorPlacement[]): LineController {
+  if (isVtlRuntimeId(algorithmId)) {
+    try {
+      const { program } = resolveCompiledCustomAlgorithm(algorithmId, 'line');
+      return createVtlLineController(program, sensorPlacements, undefined, onVtlHalt);
+    } catch (err) {
+      return brokenLineController(err instanceof Error ? err.message : String(err));
+    }
+  }
   switch (algorithmId) {
     case 'bangBang':
       return createBangBang();
@@ -64,6 +140,14 @@ function makeLineController(algorithmId: string): LineController {
 }
 
 function makeMazeController(algorithmId: string): MazeController {
+  if (isVtlRuntimeId(algorithmId)) {
+    try {
+      const { program } = resolveCompiledCustomAlgorithm(algorithmId, 'maze');
+      return createVtlMazeController(program, undefined, onVtlHalt);
+    } catch (err) {
+      return brokenMazeController(err instanceof Error ? err.message : String(err));
+    }
+  }
   switch (algorithmId) {
     case 'floodFill':
       return createFloodFill();
@@ -77,9 +161,11 @@ export function getLoop(): FixedStepLoop {
   return loop;
 }
 
-export function buildLine(mapId: string, robotId: string, algorithmId: string): EngineSnapshot {
+export function buildLine(mapId: string, robotId: string, algorithmId: string, layoutId: string = robotId): EngineSnapshot {
   kind = 'line';
+  vtlError = null;
   const robot = getLineRobot(robotId);
+  const sensorPlacements = resolveLineSensorPlacements(robot, layoutId);
   let bitmap: LineBitmap | undefined;
   let startPose: Pose2D;
   let startRadius: number;
@@ -104,16 +190,19 @@ export function buildLine(mapId: string, robotId: string, algorithmId: string): 
     startRadius = mapDef.startRadiusMm;
     pathLengthMm = mapDef.pathLengthMm;
   }
-  lineConfig = { bitmap, robot, startPose, startRadius, pathLengthMm };
-  lineController = makeLineController(algorithmId);
+  currentAlgorithmId = algorithmId;
+  lineConfig = { bitmap, robot, sensorPlacements, startPose, startRadius, pathLengthMm };
+  lineController = makeLineController(algorithmId, sensorPlacements);
   lineController.reset();
-  lineState = initLineRunState(lineConfig, robot.sensorCount);
+  lineState = initLineRunState(lineConfig, sensorPlacements.length);
   loop.resetAccumulator();
   return snapshot();
 }
 
-export function buildMaze(mapId: string, robotId: string, algorithmId: string): EngineSnapshot {
+export function buildMaze(mapId: string, robotId: string, algorithmId: string, layoutId: string = robotId): EngineSnapshot {
   kind = 'maze';
+  vtlError = null;
+  currentAlgorithmId = algorithmId;
   const mapDef = isCustomRuntimeId(mapId) ? resolveCustomMazeMap(mapId) : getMazeMap(mapId);
   const robot = getMazeRobot(robotId);
   mazeConfig = {
@@ -122,6 +211,7 @@ export function buildMaze(mapId: string, robotId: string, algorithmId: string): 
     robot,
     timeLimitS: 120,
     collisionRadius: Math.max(30, robot.wheelBase * 0.5),
+    sensorPlacements: resolveMazeSensorPlacements(robot, layoutId),
   };
   mazeController = makeMazeController(algorithmId);
   mazeController.reset({
@@ -158,6 +248,7 @@ function snapshot(): EngineSnapshot {
         i: lineState.lastDebug.i,
         d: lineState.lastDebug.d,
       },
+      vtlError: vtlError ?? undefined,
     };
   }
   if (kind === 'maze' && mazeState) {
@@ -173,6 +264,7 @@ function snapshot(): EngineSnapshot {
         cellsVisited: mazeState.lastDebug.cellsVisited,
         phase: mazeState.lastDebug.phase,
       },
+      vtlError: vtlError ?? undefined,
     };
   }
   return {
@@ -205,4 +297,26 @@ export function stepEngineOnce(params: Record<string, number | string>, baseSpee
 
 export function getSnapshot(): EngineSnapshot {
   return snapshot();
+}
+
+/**
+ * Swaps a freshly-recompiled `Program` into the currently-running `vtl:${id}` controller in place —
+ * Algorithms.md §3.2's "compiling source edit -> hot-swap next tick, preserving state whose
+ * names/types still match." Returns `false` (does nothing) when there's no active vtl controller to
+ * swap into, e.g. a built-in algorithm is selected, or the current controller is the inert
+ * "broken" stub from a prior compile failure — callers should fall back to a full build in that case.
+ */
+export function hotSwapVtlAlgorithm(newProgram: Program): boolean {
+  if (!currentAlgorithmId || !isVtlRuntimeId(currentAlgorithmId)) return false;
+  if (kind === 'line' && lineController && 'hotSwap' in lineController) {
+    (lineController as VtlLineController).hotSwap(newProgram);
+    vtlError = null;
+    return true;
+  }
+  if (kind === 'maze' && mazeController && 'hotSwap' in mazeController) {
+    (mazeController as VtlMazeController).hotSwap(newProgram);
+    vtlError = null;
+    return true;
+  }
+  return false;
 }

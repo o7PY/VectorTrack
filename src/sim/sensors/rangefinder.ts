@@ -1,4 +1,6 @@
-import type { MazeSensorReading } from '../core/types';
+import type { MazeSensorReading, Pose2D } from '../core/types';
+import type { SensorPlacement } from './placement';
+import { sensorWorldHeading, sensorWorldPosition } from './placement';
 
 export interface WallSegment {
   x1: number;
@@ -51,20 +53,35 @@ export function distanceToNearestWall(x: number, y: number, segments: WallSegmen
   return best;
 }
 
-/** Front/left/right rangefinder array, mounted at the robot origin (SPEC 4.2). */
+/**
+ * Front/left/right rangefinder array, mounted at the robot origin by default (SPEC 4.2). A custom
+ * `placements` array may override any of the three roles by matching `id` ('front'/'left'/'right')
+ * — Algorithms.md §2.4: the built-in maze algorithms only ever read these three roles, so any other
+ * configured rangefinder is legal to place but inert. Omitting `placements` (the built-in-robot
+ * path) keeps the exact pre-Phase-J raycast-from-origin behavior, byte-for-byte.
+ */
 export function sampleMazeSensors(
   x: number,
   y: number,
   theta: number,
   sensorRange: number,
   segments: WallSegment[],
+  placements?: SensorPlacement[],
 ): MazeSensorReading {
   // World convention: +y is South, so a +theta rotation is a clockwise
   // (compass-right) turn. Compass-left is therefore theta-90°, right is theta+90°.
+  const pose: Pose2D = { x, y, theta };
+  function castRole(id: 'front' | 'left' | 'right', fallbackAngle: number): number {
+    const placement = placements?.find((p) => p.id === id);
+    if (!placement) return raycast(x, y, fallbackAngle, sensorRange, segments);
+    const origin = sensorWorldPosition(pose, placement);
+    const angle = sensorWorldHeading(pose, placement);
+    return raycast(origin.x, origin.y, angle, placement.maxRangeMm ?? sensorRange, segments);
+  }
   return {
-    front: raycast(x, y, theta, sensorRange, segments),
-    left: raycast(x, y, theta - Math.PI / 2, sensorRange, segments),
-    right: raycast(x, y, theta + Math.PI / 2, sensorRange, segments),
+    front: castRole('front', theta),
+    left: castRole('left', theta - Math.PI / 2),
+    right: castRole('right', theta + Math.PI / 2),
   };
 }
 

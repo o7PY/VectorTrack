@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lineMaps } from '../../maps/line';
 import { lineRobots, pidDefaults } from '../../robots/definitions';
+import { defaultLineLayout } from '../../robots/layouts';
 import { createPid } from '../algorithms/pid';
 import { initLineRunState, tickLine } from './lineRunner';
 import type { LineRunConfig } from './lineRunner';
@@ -58,6 +59,7 @@ function makeConfig(mapId: string, robotId: string): { config: LineRunConfig; se
   const config: LineRunConfig = {
     bitmap: { width, height, mmPerPixel, data },
     robot,
+    sensorPlacements: defaultLineLayout(robot).sensors,
     startPose: mapDef.startPose,
     startRadius: mapDef.startRadiusMm,
     pathLengthMm: mapDef.pathLengthMm,

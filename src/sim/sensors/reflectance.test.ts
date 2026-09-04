@@ -36,26 +36,35 @@ describe('sampleReflectance', () => {
   });
 });
 
+const LAT5 = [-2, -1, 0, 1, 2]; // 5-sensor uniform array, index-unit lateral offsets (spacing 1)
+const LAT3 = [-1, 0, 1];
+const LAT7 = [-3, -2, -1, 0, 1, 2, 3];
+
 describe('computeLineError', () => {
   it('is zero when the line is centered (symmetric readings)', () => {
-    expect(computeLineError([0, 0, 1, 0, 0], 0)).toBeCloseTo(0, 6);
+    expect(computeLineError([0, 0, 1, 0, 0], 0, LAT5)).toBeCloseTo(0, 6);
   });
 
-  it('is positive when weight is on the higher-index (left) sensors', () => {
-    expect(computeLineError([0, 0, 0, 0, 1], 0)).toBeCloseTo(2, 6);
+  it('is positive when weight is on the higher-index (right) sensors', () => {
+    expect(computeLineError([0, 0, 0, 0, 1], 0, LAT5)).toBeCloseTo(1, 6);
   });
 
-  it('is negative when weight is on the lower-index (right) sensors', () => {
-    expect(computeLineError([1, 0, 0, 0, 0], 0)).toBeCloseTo(-2, 6);
+  it('is negative when weight is on the lower-index (left) sensors', () => {
+    expect(computeLineError([1, 0, 0, 0, 0], 0, LAT5)).toBeCloseTo(-1, 6);
   });
 
   it('holds the last error when all sensors read white', () => {
-    expect(computeLineError([0, 0, 0, 0, 0], 1.5)).toBe(1.5);
+    expect(computeLineError([0, 0, 0, 0, 0], 1.5, LAT5)).toBe(1.5);
   });
 
   it('works for a 3-sensor array', () => {
-    expect(computeLineError([1, 0, 0], 0)).toBeCloseTo(-1, 6);
-    expect(computeLineError([0, 0, 1], 0)).toBeCloseTo(1, 6);
+    expect(computeLineError([1, 0, 0], 0, LAT3)).toBeCloseTo(-1, 6);
+    expect(computeLineError([0, 0, 1], 0, LAT3)).toBeCloseTo(1, 6);
+  });
+
+  it('is normalized to [-1, 1] regardless of sensor count (Algorithms.md Amendment A1)', () => {
+    expect(computeLineError([0, 0, 0, 0, 1], 0, LAT5)).toBeCloseTo(1, 6);
+    expect(computeLineError([0, 0, 0, 0, 0, 0, 1], 0, LAT7)).toBeCloseTo(1, 6);
   });
 });
 

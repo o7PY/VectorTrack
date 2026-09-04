@@ -11,8 +11,8 @@ export function createProportional(): LineController {
     reset() {
       lastError = 0;
     },
-    step(sensors, _dt, params, baseSpeed) {
-      const error = computeLineError(sensors, lastError);
+    step(sensors, _dt, params, baseSpeed, _maxWheelSpeed, _wheelBase, sensorLateralMm) {
+      const error = computeLineError(sensors, lastError, sensorLateralMm);
       lastError = error;
 
       const kp = params.Kp ?? 0;

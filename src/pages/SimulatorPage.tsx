@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { useSimulationLoop } from '../ui/useSimulationLoop';
 import { ModeTabs } from '../ui/ModeTabs';
@@ -14,6 +15,10 @@ import { SettingsButton } from '../ui/SettingsButton';
 import { Canvas2D } from '../render2d/Canvas2D';
 import { Scene3D } from '../render3d/Scene3D';
 import Logo from '../ui/Logo';
+import { getCustomAlgorithm, loadCustomAlgorithmStore } from '../store/customAlgorithms';
+import { isVtlRuntimeId, toBareVtlId } from '../store/customAlgorithmResolvers';
+import { CodeEditor } from '../editor/algorithm/CodeEditor';
+import { SensorLayoutCanvas } from '../editor/sensors/SensorLayoutCanvas';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -27,6 +32,31 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export default function SimulatorPage() {
   useSimulationLoop();
   const viewMode = useStore((s) => s.viewMode);
+  const mode = useStore((s) => s.mode);
+  const robotId = useStore((s) => s.robotId);
+  const layoutId = useStore((s) => s.layoutId);
+  const algorithmId = useStore((s) => s.algorithmId);
+  const selectMode = useStore((s) => s.selectMode);
+  const selectAlgorithm = useStore((s) => s.selectAlgorithm);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [codeEditorOpen, setCodeEditorOpen] = useState(false);
+  const [sensorEditorOpen, setSensorEditorOpen] = useState(false);
+
+  // Consumes the `?algorithm=vtl:<id>` hook written by AlgorithmsPage.tsx's "+ New"/"Edit" actions
+  // (Algorithms.md §3.1) — one-shot on mount, then the param is stripped so it never re-fires on a
+  // later in-page navigation or re-render. Since that hook only ever fires from a "+ New"/"Edit"
+  // click, it also opens the code editor window directly, rather than landing on the simulator with
+  // the algorithm merely selected.
+  useEffect(() => {
+    const requested = searchParams.get('algorithm');
+    if (!requested || !isVtlRuntimeId(requested)) return;
+    const custom = getCustomAlgorithm(loadCustomAlgorithmStore(), toBareVtlId(requested));
+    if (custom && custom.mode !== useStore.getState().mode) selectMode(custom.mode);
+    selectAlgorithm(requested);
+    setCodeEditorOpen(true);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex h-screen w-screen flex-col bg-neutral-950 text-neutral-100">
@@ -45,6 +75,12 @@ export default function SimulatorPage() {
           >
             Map Maker
           </Link>
+          <Link
+            to="/algorithms"
+            className="rounded-md border border-neutral-800 px-3 py-1.5 text-sm text-sky-400 hover:border-neutral-700 hover:text-sky-300"
+          >
+            My Algorithms
+          </Link>
           <SettingsButton />
         </div>
       </header>
@@ -56,6 +92,13 @@ export default function SimulatorPage() {
           </Section>
           <Section title="Robot">
             <RobotSelect />
+            <button
+              type="button"
+              onClick={() => setSensorEditorOpen(true)}
+              className="rounded-md border border-neutral-800 px-3 py-1.5 text-sm text-sky-400 hover:border-neutral-700 hover:text-sky-300"
+            >
+              Sensors
+            </button>
           </Section>
           <Section title="Algorithm">
             <AlgorithmSelect />
@@ -63,6 +106,15 @@ export default function SimulatorPage() {
           <Section title="Parameters">
             <ParamPanel />
           </Section>
+          {isVtlRuntimeId(algorithmId) && (
+            <button
+              type="button"
+              onClick={() => setCodeEditorOpen(true)}
+              className="rounded-md border border-neutral-800 px-3 py-1.5 text-sm text-sky-400 hover:border-neutral-700 hover:text-sky-300"
+            >
+              Edit Code
+            </button>
+          )}
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
@@ -74,6 +126,14 @@ export default function SimulatorPage() {
           <TelemetryPanel />
         </main>
       </div>
+
+      <CodeEditor
+        key={algorithmId}
+        open={codeEditorOpen}
+        onClose={() => setCodeEditorOpen(false)}
+        onOpenSensorEditor={() => setSensorEditorOpen(true)}
+      />
+      <SensorLayoutCanvas key={`${mode}:${robotId}:${layoutId}`} open={sensorEditorOpen} onClose={() => setSensorEditorOpen(false)} />
     </div>
   );
 }

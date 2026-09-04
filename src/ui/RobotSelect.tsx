@@ -1,14 +1,35 @@
 import { useStore } from '../store/useStore';
 import { lineRobots, mazeRobots } from '../robots/definitions';
 import type { LineRobotSpec, MazeRobotSpec } from '../sim/core/types';
+import { resolveLineSensorPlacements, resolveMazeSensorPlacements } from '../store/engine';
+import { isSensorLayoutRuntimeId, toBareSensorLayoutId } from '../store/customAlgorithmResolvers';
+import { getCustomSensorLayout, loadCustomAlgorithmStore } from '../store/customAlgorithms';
 
 function isLineRobot(r: LineRobotSpec | MazeRobotSpec): r is LineRobotSpec {
   return r.kind === 'line';
 }
 
+// Reflects the actual currently-active sensor layout (built-in default or a saved custom one),
+// not just the robot spec's own fixed fields — a custom layout can change the sensor count/type
+// away from `robot.sensorCount`/`robot.sensorRange`, and the sidebar must show what's really active.
+function describeSensors(robot: LineRobotSpec | MazeRobotSpec, layoutId: string): string {
+  if (isLineRobot(robot)) {
+    return `${resolveLineSensorPlacements(robot, layoutId).length}`;
+  }
+  const custom = resolveMazeSensorPlacements(robot, layoutId);
+  return custom ? `${custom.length} (custom)` : `3 (F/L/R), ${robot.sensorRange}mm range`;
+}
+
+function describeLayoutName(layoutId: string): string {
+  if (!isSensorLayoutRuntimeId(layoutId)) return 'Default';
+  const layout = getCustomSensorLayout(loadCustomAlgorithmStore(), toBareSensorLayoutId(layoutId));
+  return layout?.name ?? 'Default';
+}
+
 export function RobotSelect() {
   const mode = useStore((s) => s.mode);
   const robotId = useStore((s) => s.robotId);
+  const layoutId = useStore((s) => s.layoutId);
   const selectRobot = useStore((s) => s.selectRobot);
   const robots = mode === 'line' ? lineRobots : mazeRobots;
   const robot = robots.find((r) => r.id === robotId) ?? robots[0];
@@ -28,10 +49,10 @@ export function RobotSelect() {
       </select>
 
       <dl className="grid grid-cols-2 gap-x-2 gap-y-0.5 rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs">
+        <dt className="text-neutral-500">Sensor layout</dt>
+        <dd className="text-right text-neutral-300">{describeLayoutName(layoutId)}</dd>
         <dt className="text-neutral-500">Sensors</dt>
-        <dd className="text-right text-neutral-300">
-          {isLineRobot(robot) ? robot.sensorCount : `3 (F/L/R), ${robot.sensorRange}mm range`}
-        </dd>
+        <dd className="text-right text-neutral-300">{describeSensors(robot, layoutId)}</dd>
         <dt className="text-neutral-500">Wheelbase</dt>
         <dd className="text-right text-neutral-300">{robot.wheelBase} mm</dd>
         <dt className="text-neutral-500">Max speed</dt>

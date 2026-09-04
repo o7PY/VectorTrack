@@ -15,8 +15,8 @@ export function createPid(): LineController {
       integral = 0;
       filteredDerivative = 0;
     },
-    step(sensors, dt, params, baseSpeed) {
-      const error = computeLineError(sensors, lastError);
+    step(sensors, dt, params, baseSpeed, _maxWheelSpeed, _wheelBase, sensorLateralMm) {
+      const error = computeLineError(sensors, lastError, sensorLateralMm);
 
       const kp = params.Kp ?? 0;
       const ki = params.Ki ?? 0;

@@ -110,6 +110,9 @@ export default function EditorPage() {
           <Link to="/simulator" className="text-sm text-neutral-400 hover:text-neutral-100">
             Simulator
           </Link>
+          <Link to="/algorithms" className="text-sm text-neutral-400 hover:text-neutral-100">
+            My Algorithms
+          </Link>
         </div>
       </header>
 

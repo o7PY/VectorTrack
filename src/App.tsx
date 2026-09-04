@@ -9,6 +9,7 @@ const DocsPage = lazy(() => import('./pages/DocsPage'));
 const EditorPage = lazy(() => import('./pages/EditorPage'));
 const MazeEditorPage = lazy(() => import('./pages/editor/MazeEditorPage'));
 const LineEditorPage = lazy(() => import('./pages/editor/LineEditorPage'));
+const AlgorithmsPage = lazy(() => import('./pages/AlgorithmsPage'));
 
 function LazyFallback({ label }: { label: string }) {
   return (
@@ -60,6 +61,14 @@ export default function App() {
           element={
             <Suspense fallback={<LazyFallback label="Loading line editor…" />}>
               <LineEditorPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/algorithms"
+          element={
+            <Suspense fallback={<LazyFallback label="Loading algorithms…" />}>
+              <AlgorithmsPage />
             </Suspense>
           }
         />

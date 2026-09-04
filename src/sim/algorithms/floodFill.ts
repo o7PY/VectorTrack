@@ -1,26 +1,10 @@
 import type { CardinalDir, Cell, MazeController, MazeGoal } from '../core/types';
 import { goalCells, isInGoal } from '../maze/grid';
-import {
-  ALL_DIRS,
-  CellMotionController,
-  DIR_BACK,
-  DIR_LEFT,
-  DIR_RIGHT,
-  cellCenter,
-  neighborCell,
-} from './mazeMotion';
+import { MazeWallKnowledge, computeFlood as sharedComputeFlood } from '../maze/motionLayer';
+import { ALL_DIRS, CellMotionController, DIR_BACK, cellCenter, neighborCell } from './mazeMotion';
 
 type Phase = 'explore' | 'return' | 'run' | 'done';
 type Mode = 'turn' | 'forward';
-
-interface WallKnowledge {
-  N?: boolean;
-  E?: boolean;
-  S?: boolean;
-  W?: boolean;
-}
-
-const DIR_NAME: Record<CardinalDir, keyof WallKnowledge> = { 0: 'N', 1: 'E', 2: 'S', 3: 'W' };
 
 function key(c: Cell): string {
   return `${c.row},${c.col}`;
@@ -40,7 +24,7 @@ export function createFloodFill(): MazeController {
   let goal: MazeGoal = { row: 0, col: 0, width: 1, height: 1 };
   let motion: CellMotionController;
 
-  let known: Map<string, WallKnowledge>;
+  let knowledge: MazeWallKnowledge;
   let heading: CardinalDir = 1;
   let targetDir: CardinalDir = 1;
   let mode: Mode = 'turn';
@@ -52,54 +36,8 @@ export function createFloodFill(): MazeController {
   let pathIndex = 0;
   let hasTraveled = false;
 
-  /**
-   * `assumeOpen` controls how an undiscovered wall is treated:
-   *  - true (optimistic, used while exploring): unknown = open, so the flood
-   *    lures the robot toward undiscovered territory — that's what makes
-   *    exploration converge on the goal quickly.
-   *  - false (conservative, used once a path is already confirmed): unknown
-   *    = wall, so replanning only ever uses edges the robot has actually
-   *    driven. Using "optimistic" here would let a later, still-unconfirmed
-   *    "shortcut" keep looking better than the known-good route every time
-   *    it's rediscovered, which never converges.
-   */
-  function hasWall(c: Cell, dir: CardinalDir, assumeOpen: boolean): boolean {
-    const known_ = known.get(key(c))?.[DIR_NAME[dir]];
-    if (known_ !== undefined) return known_;
-    return !assumeOpen;
-  }
-
-  function markWall(c: Cell, dir: CardinalDir, isWall: boolean): void {
-    const k = known.get(key(c)) ?? {};
-    k[DIR_NAME[dir]] = isWall;
-    known.set(key(c), k);
-
-    const n = neighborCell(c, dir);
-    if (inBounds(rows, cols, n)) {
-      const nk = known.get(key(n)) ?? {};
-      nk[DIR_NAME[DIR_BACK[dir]]] = isWall;
-      known.set(key(n), nk);
-    }
-  }
-
   function computeFlood(targets: Cell[], assumeOpen: boolean): number[][] {
-    const dist: number[][] = Array.from({ length: rows }, () => new Array(cols).fill(Infinity));
-    for (const t of targets) dist[t.row][t.col] = 0;
-    const queue: Cell[] = [...targets];
-    let qi = 0;
-    while (qi < queue.length) {
-      const cur = queue[qi++];
-      for (const dir of ALL_DIRS) {
-        if (hasWall(cur, dir, assumeOpen)) continue;
-        const n = neighborCell(cur, dir);
-        if (!inBounds(rows, cols, n)) continue;
-        if (dist[n.row][n.col] > dist[cur.row][cur.col] + 1) {
-          dist[n.row][n.col] = dist[cur.row][cur.col] + 1;
-          queue.push(n);
-        }
-      }
-    }
-    return dist;
+    return sharedComputeFlood(rows, cols, targets, knowledge, assumeOpen);
   }
 
   function bestNeighborDir(
@@ -113,7 +51,7 @@ export function createFloodFill(): MazeController {
     let bestDist = Infinity;
     let bestUnvisited = false;
     for (const dir of ALL_DIRS) {
-      if (hasWall(cell, dir, assumeOpen)) continue;
+      if (knowledge.hasWall(cell, dir, assumeOpen)) continue;
       const n = neighborCell(cell, dir);
       if (!inBounds(rows, cols, n)) continue;
       const d = dist[n.row][n.col];
@@ -133,12 +71,6 @@ export function createFloodFill(): MazeController {
       }
     }
     return best;
-  }
-
-  function observeWalls(cell: Cell, facing: CardinalDir, front: number, left: number, right: number, threshold: number): void {
-    markWall(cell, facing, front <= threshold);
-    markWall(cell, DIR_LEFT[facing], left <= threshold);
-    markWall(cell, DIR_RIGHT[facing], right <= threshold);
   }
 
   function planPath(from: Cell, targets: Cell[]): CardinalDir[] {
@@ -166,7 +98,7 @@ export function createFloodFill(): MazeController {
       start = ctx.start;
       goal = ctx.goal;
       motion = new CellMotionController(ctx.maxWheelSpeed, ctx.wheelBase);
-      known = new Map();
+      knowledge = new MazeWallKnowledge(ctx.rows, ctx.cols);
       heading = 1;
       targetDir = 1;
       // Start in 'forward' mode with targetCell already at start: the first
@@ -212,12 +144,12 @@ export function createFloodFill(): MazeController {
       // left and right sides at arrival, never straight behind). Skip this
       // on the very first (synthetic) "arrival" at the start cell, since we
       // didn't actually travel from anywhere.
-      if (hasTraveled) markWall(currentCell, DIR_BACK[heading], false);
+      if (hasTraveled) knowledge.markWall(currentCell, DIR_BACK[heading], false);
       hasTraveled = true;
 
       if (phase === 'explore' || phase === 'return') {
         const threshold = cellSize * 0.6;
-        observeWalls(currentCell, heading, sensors.front, sensors.left, sensors.right, threshold);
+        knowledge.observeWalls(currentCell, heading, sensors.front, sensors.left, sensors.right, threshold);
 
         if (phase === 'explore' && isInGoal(currentCell, goal)) {
           phase = 'return';

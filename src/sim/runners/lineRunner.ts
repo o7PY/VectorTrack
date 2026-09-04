@@ -1,11 +1,14 @@
 import { stepKinematics } from '../core/kinematics';
 import type { LineController, LineControllerDebug, LineRobotSpec, Pose2D, RunStatus } from '../core/types';
 import type { LineBitmap } from '../sensors/reflectance';
-import { sampleLineSensors } from '../sensors/reflectance';
+import { sampleLineSensorsFromPlacements, WHITE_THRESHOLD } from '../sensors/reflectance';
+import type { SensorPlacement } from '../sensors/placement';
 
 export interface LineRunConfig {
   bitmap: LineBitmap;
   robot: LineRobotSpec;
+  /** Left-to-right ordered reflectance placements (Algorithms.md §2.1) — `sensor(0)` is `sensorPlacements[0]`. */
+  sensorPlacements: SensorPlacement[];
   startPose: Pose2D;
   startRadius: number; // mm, capture radius around start marker for lap completion
   pathLengthMm: number; // approximate total loop length, for "has done a full lap" gating
@@ -24,7 +27,6 @@ export interface LineRunState {
 }
 
 const LOST_LINE_TIMEOUT_S = 1.5;
-const WHITE_THRESHOLD = 0.08;
 const LAP_PROGRESS_FRACTION = 0.85;
 
 export function initLineRunState(config: LineRunConfig, sensorCount: number): LineRunState {
@@ -51,14 +53,10 @@ export function tickLine(
 ): LineRunState {
   if (state.status.outcome === 'success' || state.status.outcome === 'failed') return state;
 
-  const sensors = sampleLineSensors(config.bitmap, state.pose, {
-    sensorCount: config.robot.sensorCount,
-    sensorSpacing: config.robot.sensorSpacing,
-    sensorForwardOffset: config.robot.sensorForwardOffset,
-    sensorSampleRadius: config.robot.sensorSampleRadius,
-  });
+  const sensors = sampleLineSensorsFromPlacements(config.bitmap, state.pose, config.sensorPlacements);
+  const sensorLateralMm = config.sensorPlacements.map((p) => p.lateralMm);
 
-  const out = controller.step(sensors, dt, params, baseSpeed, config.robot.maxWheelSpeed, config.robot.wheelBase);
+  const out = controller.step(sensors, dt, params, baseSpeed, config.robot.maxWheelSpeed, config.robot.wheelBase, sensorLateralMm);
   const newPose = stepKinematics(state.pose, out, config.robot.wheelBase, config.robot.maxWheelSpeed, dt);
   const stepDist = Math.hypot(newPose.x - state.pose.x, newPose.y - state.pose.y);
   const distanceTraveled = state.distanceTraveled + stepDist;
