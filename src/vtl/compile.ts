@@ -44,8 +44,10 @@ function statementExprs(stmt: Statement): Expr[] {
       if (stmt.elseBody) for (const s of stmt.elseBody) exprs.push(...statementExprs(s));
       return exprs;
     }
-    default:
-      return [];
+    default: {
+      const _exhaustive: never = stmt;
+      return _exhaustive;
+    }
   }
 }
 

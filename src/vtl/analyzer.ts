@@ -292,6 +292,10 @@ export function analyze(program: Program, mode: VtlMode): VtlError[] {
         checkCall(callStmt.name, callStmt.args, callStmt.line, callStmt.column, scope);
         return;
       }
+      default: {
+        const _exhaustive: never = stmt;
+        return _exhaustive;
+      }
     }
   }
 

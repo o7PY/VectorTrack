@@ -216,6 +216,10 @@ export class Interpreter {
       case "callStmt":
         this.evalCall(stmt.name, stmt.args, stmt.line, stmt.column, scope, state);
         return;
+      default: {
+        const _exhaustive: never = stmt;
+        return _exhaustive;
+      }
     }
   }
 
