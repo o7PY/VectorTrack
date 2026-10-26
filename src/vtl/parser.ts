@@ -8,14 +8,17 @@ import type {
   CallStmt,
   EventBlock,
   Expr,
+  ForStmt,
   IfBranch,
   IfStmt,
+  IndexedSetStmt,
   LetStmt,
   ParamDecl,
   Program,
   SetStmt,
   StateDecl,
   Statement,
+  TableDecl,
   UnaryOp,
   VtlError,
   VtlEventName,
@@ -35,12 +38,15 @@ const EVENT_NAMES: VtlEventName[] = ["start", "tick", "junction"];
 export const KEYWORDS = new Set([
   "param",
   "state",
+  "table",
   "on",
   "let",
   "set",
   "if",
   "elif",
   "else",
+  "for",
+  "in",
   "and",
   "or",
   "not",
@@ -108,6 +114,7 @@ class Parser {
   parseProgram(): Program {
     const params: ParamDecl[] = [];
     const states: StateDecl[] = [];
+    const tables: TableDecl[] = [];
     const events: EventBlock[] = [];
 
     while (!this.isType("EOF")) {
@@ -117,6 +124,9 @@ class Parser {
       } else if (this.isName("state")) {
         states.push(this.parseStateDecl());
         this.expectType("NEWLINE", "end of line");
+      } else if (this.isName("table")) {
+        tables.push(this.parseTableDecl());
+        this.expectType("NEWLINE", "end of line");
       } else if (this.isName("on")) {
         events.push(this.parseEventBlock());
       } else {
@@ -124,7 +134,7 @@ class Parser {
       }
     }
 
-    return { params, states, events };
+    return { params, states, tables, events };
   }
 
   private parseParamDecl(): ParamDecl {
@@ -171,20 +181,49 @@ class Parser {
   private parseStateDecl(): StateDecl {
     const start = this.expectName("state");
     const name = this.expectType("NAME", "a state name").value;
+    if (this.isOp("[")) {
+      this.advance();
+      const length = this.expectType("NUMBER", "an array length").numberValue as number;
+      this.expectOp("]");
+      this.expectOp("=");
+      const value = this.expectType("NUMBER", "a fill value for every array element").numberValue as number;
+      return { kind: "state", name, valueKind: "number", value, length, line: start.line, column: start.column };
+    }
     this.expectOp("=");
     if (this.isType("NUMBER")) {
       const value = this.advance().numberValue as number;
-      return { kind: "state", name, valueKind: "number", value, line: start.line, column: start.column };
+      return { kind: "state", name, valueKind: "number", value, length: null, line: start.line, column: start.column };
     }
     if (this.isType("STRING")) {
       const value = this.advance().value;
-      return { kind: "state", name, valueKind: "string", value, line: start.line, column: start.column };
+      return { kind: "state", name, valueKind: "string", value, length: null, line: start.line, column: start.column };
     }
     if (this.isName("none")) {
       this.advance();
-      return { kind: "state", name, valueKind: "none", value: null, line: start.line, column: start.column };
+      return { kind: "state", name, valueKind: "none", value: null, length: null, line: start.line, column: start.column };
     }
     this.fail("A state's initial value must be a number, a string, or none.");
+  }
+
+  private parseTableDecl(): TableDecl {
+    const start = this.expectName("table");
+    const name = this.expectType("NAME", "a table name").value;
+    this.expectOp("=");
+    this.expectOp("[");
+    const values = [this.parseTableValue()];
+    while (this.isOp(",")) {
+      this.advance();
+      values.push(this.parseTableValue());
+    }
+    this.expectOp("]");
+    return { kind: "table", name, values, line: start.line, column: start.column };
+  }
+
+  private parseTableValue(): number {
+    const negative = this.isOp("-");
+    if (negative) this.advance();
+    const value = this.expectType("NUMBER", "a table value").numberValue as number;
+    return negative ? -value : value;
   }
 
   private parseEventBlock(): EventBlock {
@@ -220,6 +259,7 @@ class Parser {
     if (this.isName("let")) return this.parseLetStmt();
     if (this.isName("set")) return this.parseSetStmt();
     if (this.isName("if")) return this.parseIfStmt();
+    if (this.isName("for")) return this.parseForStmt();
     if (this.isType("NAME") && !KEYWORDS.has(this.peek().value)) return this.parseCallStmt();
     this.fail(`Unexpected "${this.peek().value || this.peek().type}" — expected a statement.`);
   }
@@ -233,13 +273,34 @@ class Parser {
     return { kind: "let", name, expr, line: start.line, column: start.column };
   }
 
-  private parseSetStmt(): SetStmt {
+  private parseSetStmt(): SetStmt | IndexedSetStmt {
     const start = this.expectName("set");
     const name = this.expectType("NAME", "a state name").value;
+    if (this.isOp("[")) {
+      this.advance();
+      const index = this.parseExpr();
+      this.expectOp("]");
+      this.expectOp("=");
+      const expr = this.parseExpr();
+      this.expectType("NEWLINE", "end of line");
+      return { kind: "indexedSet", name, index, expr, line: start.line, column: start.column };
+    }
     this.expectOp("=");
     const expr = this.parseExpr();
     this.expectType("NEWLINE", "end of line");
     return { kind: "set", name, expr, line: start.line, column: start.column };
+  }
+
+  private parseForStmt(): ForStmt {
+    const start = this.expectName("for");
+    const varName = this.expectType("NAME", "a loop variable name").value;
+    this.expectName("in");
+    const from = this.parseSum();
+    this.expectOp("..");
+    const to = this.parseSum();
+    this.expectOp(":");
+    const body = this.parseBlock();
+    return { kind: "for", varName, from, to, body, line: start.line, column: start.column };
   }
 
   private parseIfStmt(): IfStmt {
@@ -373,6 +434,12 @@ class Parser {
         const args = this.parseArgs();
         this.expectOp(")");
         return { kind: "call", name: t.value, args, line: t.line, column: t.column };
+      }
+      if (this.isOp("[")) {
+        this.advance();
+        const index = this.parseExpr();
+        this.expectOp("]");
+        return { kind: "index", name: t.value, index, line: t.line, column: t.column };
       }
       return { kind: "ident", name: t.value, line: t.line, column: t.column };
     }

@@ -22,7 +22,29 @@ export interface Token {
   column: number;
 }
 
-const OPERATORS = ["..", "<=", ">=", "==", "!=", "(", ")", ":", ",", "+", "-", "*", "/", "%", "<", ">", "="];
+// Exported so display-only tooling (editor/algorithm/highlight.ts) can assert its own operator
+// set against this one and catch drift — see highlight.test.ts.
+export const OPERATORS = [
+  "..",
+  "<=",
+  ">=",
+  "==",
+  "!=",
+  "(",
+  ")",
+  "[",
+  "]",
+  ":",
+  ",",
+  "+",
+  "-",
+  "*",
+  "/",
+  "%",
+  "<",
+  ">",
+  "=",
+];
 
 export interface LexResult {
   tokens: Token[];
@@ -46,6 +68,10 @@ export function tokenize(source: string): LexResult {
   const tokens: Token[] = [];
   const rawLines = source.split(/\r\n|\r|\n/);
   const indentStack = [0];
+  // Depth of unclosed `[`/`(` carried across line boundaries, so a `table` literal (or any
+  // bracketed expression) can be wrapped across lines without tripping INDENT/DEDENT or needing a
+  // NEWLINE mid-declaration — Python does the same for its own brackets.
+  let bracketDepth = 0;
 
   for (let lineIdx = 0; lineIdx < rawLines.length; lineIdx++) {
     const lineNo = lineIdx + 1;
@@ -64,11 +90,12 @@ export function tokenize(source: string): LexResult {
       continue;
     }
     const indent = leading.length;
+    const isContinuation = bracketDepth > 0;
 
-    if (indent > indentStack[indentStack.length - 1]) {
+    if (!isContinuation && indent > indentStack[indentStack.length - 1]) {
       indentStack.push(indent);
       tokens.push({ type: "INDENT", value: "", line: lineNo, column: 1 });
-    } else if (indent < indentStack[indentStack.length - 1]) {
+    } else if (!isContinuation && indent < indentStack[indentStack.length - 1]) {
       while (indentStack.length > 1 && indentStack[indentStack.length - 1] > indent) {
         indentStack.pop();
         tokens.push({ type: "DEDENT", value: "", line: lineNo, column: 1 });
@@ -154,7 +181,7 @@ export function tokenize(source: string): LexResult {
       }
 
       const two = rest.slice(idx, idx + 2);
-      if (OPERATORS.includes(two)) {
+      if (two.length === 2 && OPERATORS.includes(two)) {
         tokens.push({ type: "OP", value: two, line: lineNo, column: startCol });
         hadTokenOnLine = true;
         col = indent + idx + 2;
@@ -162,6 +189,8 @@ export function tokenize(source: string): LexResult {
       }
       const one = rest[idx];
       if (OPERATORS.includes(one)) {
+        if (one === "[" || one === "(") bracketDepth++;
+        else if ((one === "]" || one === ")") && bracketDepth > 0) bracketDepth--;
         tokens.push({ type: "OP", value: one, line: lineNo, column: startCol });
         hadTokenOnLine = true;
         col = indent + idx + 1;
@@ -172,7 +201,7 @@ export function tokenize(source: string): LexResult {
       col = indent + idx + 1;
     }
 
-    if (hadTokenOnLine) {
+    if (hadTokenOnLine && bracketDepth === 0) {
       tokens.push({ type: "NEWLINE", value: "", line: lineNo, column: rest.length + indent + 1 });
     }
   }

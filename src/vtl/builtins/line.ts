@@ -11,4 +11,6 @@ export const LINE_BUILTINS: BuiltinSig[] = [
   { name: "line_error_mm", arity: 0, returns: "number" },
   { name: "line_lost", arity: 0, returns: "bool" },
   { name: "drive", arity: 2, returns: "none" },
+  { name: "deriv", arity: 2, returns: "number" },
+  { name: "steer", arity: 2, returns: "none" },
 ];

@@ -7,7 +7,8 @@
 // Live value inspection (hover-while-running, ghost-annotations-while-paused) is not implemented
 // yet — it needs the interpreter to expose a value trace, which is a separate, larger piece of
 // work; deliberately deferred rather than half-built, per internal-docs/PLAN.md's Phase I notes.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useStore } from '../../store/useStore';
 import { isVtlRuntimeId, toBareVtlId } from '../../store/customAlgorithmResolvers';
 import {
@@ -18,7 +19,8 @@ import {
   saveAlgorithmDraft,
   saveAlgorithmDraftDebounced,
 } from '../../store/customAlgorithms';
-import type { VtlError } from '../../vtl/types';
+import { compile } from '../../vtl/compile';
+import type { TableDecl, VtlError } from '../../vtl/types';
 import { highlightTokens, splitTokensIntoLines } from './highlight';
 import type { HighlightTokenType } from './highlight';
 
@@ -35,6 +37,60 @@ function initialSource(algorithmId: string): string {
   const draft = loadAlgorithmDraft(bareId);
   const persisted = getCustomAlgorithm(loadCustomAlgorithmStore(), bareId);
   return draft?.source ?? persisted?.source ?? '';
+}
+
+// v0.3.1.md §H.2: a `table` whose length is a perfect square (25 -> 5x5, 49 -> 7x7) previews as a
+// labelled grid, since that's what makes a Sugeno-style rule table legible — the same 25 numbers as
+// a flat run are not. Non-square lengths intentionally fall back to the plain source view; don't
+// guess at other factorings (e.g. 5x6) per the spec. Recompiled straight from the live editor text
+// on every render, independent of the debounced store update, the same way `highlightTokens` is.
+function squareTablesIn(source: string, mode: 'line' | 'maze'): TableDecl[] {
+  const result = compile(source, mode);
+  if (!result.ok) return [];
+  return result.program.tables.filter((t) => {
+    const size = Math.sqrt(t.values.length);
+    return Number.isInteger(size) && size > 1;
+  });
+}
+
+function TableGridPreview({ table }: { table: TableDecl }) {
+  const size = Math.sqrt(table.values.length);
+  const cells: ReactNode[] = [];
+  cells.push(<div key="corner" />);
+  for (let c = 0; c < size; c++) {
+    cells.push(
+      <div key={`c${c}`} className="px-1 text-center text-[10px] text-neutral-500">
+        {c}
+      </div>,
+    );
+  }
+  for (let r = 0; r < size; r++) {
+    cells.push(
+      <div key={`r${r}`} className="pr-1 text-right text-[10px] text-neutral-500">
+        {r}
+      </div>,
+    );
+    for (let c = 0; c < size; c++) {
+      cells.push(
+        <div key={`${r}-${c}`} className="rounded bg-neutral-800 px-1 py-0.5 text-center text-neutral-100">
+          {table.values[r * size + c]}
+        </div>,
+      );
+    }
+  }
+  return (
+    <div>
+      <div className="mb-1 text-neutral-400">
+        {table.name} ({size}×{size})
+      </div>
+      <div
+        className="inline-grid gap-0.5 font-mono"
+        style={{ gridTemplateColumns: `auto repeat(${size}, minmax(1.5rem, auto))` }}
+      >
+        {cells}
+      </div>
+    </div>
+  );
 }
 
 const TOKEN_CLASS: Record<HighlightTokenType, string> = {
@@ -63,6 +119,7 @@ export function CodeEditor({
 }) {
   const algorithmId = useStore((s) => s.algorithmId);
   const updateAlgorithmSource = useStore((s) => s.updateAlgorithmSource);
+  const mode = useStore((s) => s.mode);
 
   const [text, setText] = useState(() => initialSource(algorithmId));
   const [history, setHistory] = useState<string[]>(() => [text]);
@@ -94,6 +151,8 @@ export function CodeEditor({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
+
+  const squareTables = useMemo(() => squareTablesIn(text, mode), [text, mode]);
 
   if (!isVtlRuntimeId(algorithmId) || !open) return null;
   const bareId = toBareVtlId(algorithmId);
@@ -285,6 +344,14 @@ export function CodeEditor({
             />
           </div>
         </div>
+
+        {squareTables.length > 0 && (
+          <div className="flex max-h-40 flex-wrap gap-4 overflow-y-auto scroll-thin border-t border-neutral-800 px-3 py-2 text-xs">
+            {squareTables.map((t) => (
+              <TableGridPreview key={t.name} table={t} />
+            ))}
+          </div>
+        )}
 
         {errors.length > 0 && (
           <ul className="flex max-h-24 flex-col gap-0.5 overflow-y-auto scroll-thin border-t border-neutral-800 px-3 py-1.5 text-xs text-red-400">

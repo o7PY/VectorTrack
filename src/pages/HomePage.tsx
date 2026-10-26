@@ -214,6 +214,11 @@ const FEATURES: Feature[] = [
     body: 'A pixel-art-style editor for line tracks on a white floor with a black line, matching what a real reflectance sensor sees: pencil, line, rectangle, and ellipse tools on an author-chosen grid resolution down to 10 mm, zoomable for precision, with live validation for a disconnected track, a missing start marker, or a lap too short to detect reliably. Custom tracks — maze or line — run in the simulator exactly like a built-in map.',
     screenshot: { src: '/VectorTrack/screenshots/map-maker-line.jpg', path: 'VectorTrack/#/editor/line/new', caption: 'The line editor — painting a track on a white/black grid, with live validation.' },
   },
+  {
+    title: 'Write your own algorithm in VTL',
+    body: 'VectorTrack Language is a small, deliberately bounded language for line and maze controllers: params, state, bounded for loops, fixed-size arrays, and compile-time tables — no unbounded loops, no recursion, so every program has a per-tick cost that’s checked before it ever runs. Live syntax highlighting, inline error locations, and any table with a square number of entries (a fuzzy rule table, say) previews as a labelled grid as you type.',
+    screenshot: { src: '/VectorTrack/screenshots/vtl-editor.jpg', path: 'VectorTrack/#/algorithms', caption: 'Editing a Sugeno fuzzy controller in VTL — the 5×5 rule table renders as a grid below the code.' },
+  },
 ];
 
 function Features() {

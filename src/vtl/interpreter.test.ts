@@ -209,6 +209,157 @@ describe('Interpreter — greedy flood fill (§1.8)', () => {
   });
 });
 
+describe('Interpreter — arrays, tables, and for loops (v0.3.1.md §C/§D/§G)', () => {
+  it('for loop over an inclusive range writes exactly that many elements', () => {
+    const program = mustCompile(
+      'state buf[5] = 0\nstate count = 0\non tick:\n  for i in 0..4:\n    set buf[i] = i * 2\n    set count = count + 1\n  drive(0, 0)\n',
+      'line',
+    );
+    const builtins: Record<string, VtlBuiltinFn> = { ...sharedBuiltins(1 / 120, 0), drive: () => null };
+    const interp = new Interpreter(program, builtins);
+    const state = createRunState(program);
+    interp.runEvent('tick', state);
+    expect(state.states.get('count')).toBe(5);
+    expect(state.arrays.get('buf')).toEqual([0, 2, 4, 6, 8]);
+  });
+
+  it('reads a table value declared with negative literals', () => {
+    const program = mustCompile(
+      'table t = [-2, -1, 0, 1, 2]\non tick:\n  let x = t[1]\n  drive(x, len(t))\n',
+      'line',
+    );
+    const drives: [number, number][] = [];
+    const builtins: Record<string, VtlBuiltinFn> = {
+      ...sharedBuiltins(1 / 120, 0),
+      drive: (a) => {
+        drives.push([a[0] as number, a[1] as number]);
+        return null;
+      },
+    };
+    const interp = new Interpreter(program, builtins);
+    const state = createRunState(program);
+    interp.runEvent('tick', state);
+    expect(drives[0]).toEqual([-1, 5]);
+  });
+
+  it('halts with VTL017 on a runtime out-of-range computed index', () => {
+    const program = mustCompile(
+      'state buf[3] = 0\non tick:\n  let i = 5\n  let x = buf[i]\n  drive(0, 0)\n',
+      'line',
+    );
+    const builtins: Record<string, VtlBuiltinFn> = { ...sharedBuiltins(1 / 120, 0), drive: () => null };
+    const interp = new Interpreter(program, builtins);
+    const state = createRunState(program);
+    expect(() => interp.runEvent('tick', state)).toThrowError(/out of range/);
+  });
+
+  it('a hot-swap resets an array whose length changed, but preserves it when unchanged', () => {
+    const programA = mustCompile('state buf[3] = 0\non tick:\n  set buf[0] = 9\n  drive(0, 0)\n', 'line');
+    const builtins: Record<string, VtlBuiltinFn> = { ...sharedBuiltins(1 / 120, 0), drive: () => null };
+    const interp = new Interpreter(programA, builtins);
+    const state = createRunState(programA);
+    interp.runEvent('tick', state);
+    expect(state.arrays.get('buf')).toEqual([9, 0, 0]);
+  });
+});
+
+describe('Interpreter — steer/deriv match the hand-rolled PID exactly (v0.3.1.md §F.2)', () => {
+  const HAND_ROLLED_PID = `
+param Kp = 0.45 range 0..2
+param Ki = 0.00 range 0..0.5
+param Kd = 0.12 range 0..1
+param base = 250 range 50..800
+
+state integral = 0
+state lastError = 0
+state lastD = 0
+
+on tick:
+  let e = line_error()
+  set integral = clamp(integral + e * dt(), -1, 1)
+  let raw = (e - lastError) / dt()
+  let d = lastD + (raw - lastD) * (dt() / (0.12 + dt()))
+  set lastD = d
+  set lastError = e
+  let corr = Kp * e * 340 + Ki * integral * 340 + Kd * d * 20
+  drive(base - corr, base + corr)
+`;
+
+  const STEER_PID = `
+param Kp = 0.45 range 0..2
+param Ki = 0.00 range 0..0.5
+param Kd = 0.12 range 0..1
+param base = 250 range 50..800
+
+state integral = 0
+
+on tick:
+  let e = line_error()
+  set integral = clamp(integral + e * dt(), -1, 1)
+  steer(base, Kp * e + Ki * integral + Kd * deriv(e, 0.12))
+`;
+
+  const D_GAIN_SCALE = 20;
+  const ERROR_GAIN_SCALE = 340;
+
+  // Mirrors sim/algorithms/vtlAdapter.ts's deriv/steer builtin implementations exactly — this
+  // describe block checks the language contract (interpreter call semantics), while
+  // sim/algorithms/vtlPidEquivalence.test.ts checks the real adapter end-to-end on a simulated map.
+  function derivSteerBuiltins(dtValue: number): Record<string, VtlBuiltinFn> {
+    const derivStates = new Map<string, { lastRaw: number; lastOut: number }>();
+    return {
+      deriv: (a, ctx) => {
+        const e = a[0] as number;
+        const tau = a[1] as number;
+        const key = `${ctx.line}:${ctx.column}`;
+        const prev = derivStates.get(key) ?? { lastRaw: 0, lastOut: 0 };
+        const raw = (e - prev.lastRaw) / dtValue;
+        const out = prev.lastOut + (raw - prev.lastOut) * (dtValue / (tau + dtValue));
+        derivStates.set(key, { lastRaw: e, lastOut: out });
+        return out * (D_GAIN_SCALE / ERROR_GAIN_SCALE);
+      },
+    };
+  }
+
+  it('produces identical wheel speeds tick-for-tick across a noisy error sequence', () => {
+    const errors = [0, 0.5, -0.3, 0.2, 0.05, -0.6, 0.4, 0, -0.1, 0.35];
+    const dt = 1 / 120;
+
+    function run(source: string): [number, number][] {
+      const program = mustCompile(source, 'line');
+      let idx = 0;
+      const drives: [number, number][] = [];
+      const builtins: Record<string, VtlBuiltinFn> = {
+        ...sharedBuiltins(dt, 0),
+        ...derivSteerBuiltins(dt),
+        line_error: () => errors[idx],
+        drive: (a) => {
+          drives.push([a[0] as number, a[1] as number]);
+          return null;
+        },
+        steer: (a) => {
+          const base = a[0] as number;
+          const corr = (a[1] as number) * ERROR_GAIN_SCALE;
+          drives.push([base - corr, base + corr]);
+          return null;
+        },
+      };
+      const interp = new Interpreter(program, builtins);
+      const state = createRunState(program);
+      for (idx = 0; idx < errors.length; idx++) interp.runEvent('tick', state);
+      return drives;
+    }
+
+    const handRolled = run(HAND_ROLLED_PID);
+    const steerForm = run(STEER_PID);
+    expect(handRolled).toHaveLength(steerForm.length);
+    for (let i = 0; i < handRolled.length; i++) {
+      expect(steerForm[i][0]).toBeCloseTo(handRolled[i][0], 9);
+      expect(steerForm[i][1]).toBeCloseTo(handRolled[i][1], 9);
+    }
+  });
+});
+
 describe('Interpreter — runtime halts', () => {
   it('halts with VTL011 on division by zero', () => {
     const program = mustCompile('on tick:\n  let e = 1 / 0\n  drive(0, 0)\n', 'line');

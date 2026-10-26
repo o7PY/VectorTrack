@@ -29,3 +29,5 @@ internal-docs/
 # Local AI tooling config/cache (not project source)
 .claude/
 .serena/
+
+Transcript.md

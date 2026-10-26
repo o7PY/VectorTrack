@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>VectorTrack — Interview Prep</title>
+<style>
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:#f5f7f4;color:#1d2723;font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:52px 24px 32px;background:#e9f1eb;border-bottom:1px solid #dce4de}
+.wrap{max-width:900px;margin:auto}
+h1{font-size:clamp(2rem,5vw,3rem);line-height:1.1;letter-spacing:-.04em;margin:0 0 12px}
+.sub{color:#69766f;margin:0}
+nav.toc{background:white;border:1px solid #dce4de;border-radius:12px;padding:16px 22px;margin:28px 0}
+nav.toc ol{margin:6px 0 0;padding-left:1.3rem;columns:2;column-gap:32px}
+nav.toc a{color:#176b50;text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+main{padding:0 24px 80px}
+section{background:white;border:1px solid #dce4de;border-radius:12px;margin:0 0 18px;padding:22px 26px;box-shadow:0 2px 8px #19291f08}
+h2{margin:0 0 4px;font-size:1.35rem;letter-spacing:-.02em}
+h2 .n{color:#176b50;font-size:.8rem;text-transform:uppercase;letter-spacing:.09em;display:block;font-weight:750}
+h3{margin:22px 0 4px;font-size:1.02rem}
+p{margin:8px 0}
+ul{margin:6px 0;padding-left:1.3rem}
+li{margin:3px 0}
+code{background:#eef3ef;border-radius:4px;padding:1px 5px;font:.88em ui-monospace,Consolas,monospace}
+pre{background:#1d2723;color:#e6efe9;border-radius:8px;padding:14px 16px;overflow:auto;font:.85rem/1.5 ui-monospace,Consolas,monospace;margin:10px 0}
+pre code{background:none;padding:0;color:inherit}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:.93rem}
+th,td{border:1px solid #dce4de;padding:7px 10px;text-align:left;vertical-align:top}
+th{background:#fbfcfa}
+.why{border-left:3px solid #176b50;background:#f1f7f3;padding:8px 14px;margin:10px 0;border-radius:0 8px 8px 0}
+.why b{color:#176b50}
+.qa details{border:1px solid #dce4de;border-radius:8px;margin:8px 0;background:#fbfcfa}
+.qa summary{cursor:pointer;padding:10px 14px;font-weight:650}
+.qa details>div{padding:0 14px 12px}
+@media(max-width:640px){nav.toc ol{columns:1}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>VectorTrack — Interview Prep</h1>
+<p class="sub">How the site was built and why: architecture, technical decisions, trade-offs, and the bugs that shaped them.</p>
+</div></header>
+
+<main><div class="wrap">
+
+<nav class="toc"><strong>Contents</strong>
+<ol>
+<li><a href="#pitch">The 60-second pitch</a></li>
+<li><a href="#stack">Stack and why</a></li>
+<li><a href="#arch">Core architecture</a></li>
+<li><a href="#sim">Simulation: loop, kinematics, determinism</a></li>
+<li><a href="#sensors">Sensors and line error</a></li>
+<li><a href="#algos">Built-in algorithms and PID tuning</a></li>
+<li><a href="#maze">Maze solving and the motion layer</a></li>
+<li><a href="#render">Rendering: 3D and 2D</a></li>
+<li><a href="#state">State management</a></li>
+<li><a href="#persist">Persistence and migrations</a></li>
+<li><a href="#routing">Routing and deployment</a></li>
+<li><a href="#mapmaker">The map maker</a></li>
+<li><a href="#vtl">VTL: the custom algorithm language</a></li>
+<li><a href="#layouts">Sensor layout editor</a></li>
+<li><a href="#testing">Testing and verification</a></li>
+<li><a href="#bugs">Bugs worth telling stories about</a></li>
+<li><a href="#tradeoffs">Trade-offs and what I'd change</a></li>
+<li><a href="#qa">Likely interview questions</a></li>
+</ol></nav>
+
+<section id="pitch"><h2><span class="n">1</span>The 60-second pitch</h2>
+<p>VectorTrack is a browser-based robotics simulator. You pick a mode (line follower or maze solver), a map, a robot and an algorithm, and watch the robot run in real time in 3D or 2D. You can tune PID gains live, build your own maps in a map editor, and write your own algorithms in a small purpose-built language (VTL) with a custom sensor layout editor.</p>
+<p>It is entirely client-side: a static bundle on GitHub Pages, no backend, no accounts, state in <code>localStorage</code>. The interesting engineering is in three places: a deterministic simulation core that is independent of rendering, a safe custom language with compile-time cost guarantees, and a persistence layer that has survived three schema generations without losing user data.</p></section>
+
+<section id="stack"><h2><span class="n">2</span>Stack and why</h2>
+<table>
+<tr><th>Concern</th><th>Choice</th><th>Reason</th></tr>
+<tr><td>Build</td><td>Vite</td><td>Fast dev server, trivial static output for GitHub Pages, <code>base</code> path support.</td></tr>
+<tr><td>Language</td><td>TypeScript (strict)</td><td>The sim and VTL interpreter are logic-heavy; types catch unit and shape mistakes early.</td></tr>
+<tr><td>UI</td><td>React 19</td><td>Lots of panels and editors reacting to shared state.</td></tr>
+<tr><td>3D</td><td>Three.js via React Three Fiber + drei</td><td>Declarative scene tied to React state; no 3D asset pipeline needed.</td></tr>
+<tr><td>2D</td><td>Canvas 2D</td><td>Cheap debug view and the editors' drawing surface.</td></tr>
+<tr><td>State</td><td>Zustand</td><td>Small, no provider boilerplate, and the store can be used outside React (the sim loop and tests).</td></tr>
+<tr><td>Styling</td><td>Tailwind v4</td><td>Fast iteration on many small UI surfaces.</td></tr>
+<tr><td>Persistence</td><td><code>localStorage</code></td><td>No backend; data is small and per-user.</td></tr>
+<tr><td>Tests / lint</td><td>Vitest, oxlint</td><td>Vitest shares Vite's config; oxlint is fast enough to run on every change.</td></tr>
+</table>
+<div class="why"><b>Decision: no 3D assets.</b> All geometry is built from primitives (<code>BoxGeometry</code>, <code>CylinderGeometry</code>, <code>ExtrudeGeometry</code>), with a procedurally drawn floor grid and line texture. That keeps the bundle small, avoids loading states, and makes robots and maps fully data-driven.</div></section>
+
+<section id="arch"><h2><span class="n">3</span>Core architecture</h2>
+<p>The single most important rule: <b>the simulation is 2D and knows nothing about rendering.</b></p>
+<pre><code>UI layer (React): selectors, PID panel, playback, telemetry
+        | reads state, dispatches commands
+Simulation core (pure TS, no DOM): fixed-step loop, kinematics,
+        sensor sampling, algorithm controllers
+        | same RobotState feeds both renderers
+2D renderer (Canvas)      3D renderer (Three.js / R3F)</code></pre>
+<ul>
+<li><code>src/sim</code> has zero imports from React or Three.js, so it runs and is unit-tested in plain Node.</li>
+<li>Both renderers read the same state, so 2D and 3D can never disagree about where the robot is.</li>
+<li>Swapping or adding a renderer does not touch simulation code.</li>
+</ul>
+<div class="why"><b>Why it matters:</b> it is what made headless verification possible. I could run a complete lap in a unit test or script and assert on the outcome, without a browser or GPU.</div></section>
+
+<section id="sim"><h2><span class="n">4</span>Simulation: loop, kinematics, determinism</h2>
+<h3>Fixed timestep</h3>
+<p><code>dt = 1/120 s</code>, decoupled from the render framerate by an accumulator. Speed multipliers (0.25x to 4x) change how many sim steps run per frame rather than changing <code>dt</code>, so results are identical at any speed.</p>
+<h3>Kinematics</h3>
+<p>Differential drive, no slip, no acceleration ramp:</p>
+<pre><code>v     = (vL + vR) / 2
+omega = (vR - vL) / wheelBase
+x' = x + v*cos(theta)*dt   y' = y + v*sin(theta)*dt   theta' = theta + omega*dt</code></pre>
+<p>Wheel speeds are clamped to <code>±maxWheelSpeed</code>. Deliberately no rigid-body physics engine: a kinematic model is enough to teach control, is cheap, and is deterministic.</p>
+<h3>Determinism</h3>
+<p>Same map + robot + algorithm + params ⇒ identical trajectory. There is no randomness builtin, evaluation is strictly source-ordered, and tests assert two runs match exactly. Determinism makes bugs reproducible and lets the app compare best times fairly.</p>
+<h3>Tab visibility</h3>
+<p>The loop pauses outright when <code>document.hidden</code>. A background tab (or automation clock) would otherwise accumulate a huge catch-up delta; the loop clamps dt, so it would limp along instead of running correctly. Found while capturing screenshots.</p></section>
+
+<section id="sensors"><h2><span class="n">5</span>Sensors and line error</h2>
+<ul>
+<li><b>Line mode:</b> N downward reflectance sensors. Each samples a small disc of a 1 px = 1 mm occupancy bitmap under its world position and averages to a float from 0 (white) to 1 (black).</li>
+<li><b>Maze mode:</b> distance sensors implemented as raycasts against wall segments, returning distance capped at max range.</li>
+</ul>
+<h3>Normalized error</h3>
+<p>The line error is <code>Σ(xᵢ·sᵢ)/Σ(sᵢ)</code> divided by the half-span, so it is always in <code>[-1, 1]</code> regardless of sensor count. That lets one algorithm and one gain scale work for 3-sensor and 5-sensor robots and for custom layouts. When every sensor reads white, the last known error is held; losing the line for more than 1.5 s fails the run.</p>
+<div class="why"><b>Trade-off:</b> normalizing changed the effective gain for the 5-sensor robot (its raw error range halved). I re-fit a single global <code>ERROR_GAIN_SCALE</code> (170 → 340) empirically rather than exactly, since one constant cannot reproduce both robots' old trajectories. The Scout got twice as aggressive and still clears every non-hard-corner map; the Ranger had no headroom to stay at half correction.</div></section>
+
+<section id="algos"><h2><span class="n">6</span>Built-in algorithms and PID tuning</h2>
+<p>Line: Bang-Bang, Proportional, PID. Maze: Wall Follower, Flood Fill. All are native TypeScript behind a common controller interface; VTL equivalents ship as starter templates and are checked against the natives with equivalence tests.</p>
+<ul>
+<li>Gains have slider plus numeric input, and changes apply <b>live on the next tick</b>; watching oscillation appear as you raise <code>Kp</code> or vanish as you raise <code>Kd</code> is the headline feature.</li>
+<li>Integral term has clamped anti-windup. Derivative is low-pass filtered (tau 0.12 s) because at 120 Hz the raw derivative is huge and noisy.</li>
+<li>Tuned gains persist per <code>(robot, algorithm)</code>.</li>
+</ul>
+<h3>Gain scaling gotcha (worth knowing cold)</h3>
+<p>Error is dimensionless in [-1, 1], but wheel speeds are in mm/s. <code>ERROR_GAIN_SCALE = 340</code> converts the P/I sum into a wheel-speed differential, and the D term gets its own much smaller <code>D_GAIN_SCALE = 20</code> because its units carry an implicit 1/dt. Reusing the P scale for D made default <code>Kd</code> demand reversed wheels, which looked like the robot "struggling to move". The same scale applies inside VTL's <code>steer()</code>, which is why a VTL correction must be a small Kp-like number (about 0.3 to 0.45), not something like 300: that saturates both wheels every tick, and the narrow, fast Ranger spins off the line while the slower Scout can limp along.</p></section>
+
+<section id="maze"><h2><span class="n">7</span>Maze solving and the motion layer</h2>
+<p>Maps are grids with per-cell wall flags (N/E/S/W), 180 mm cells and 12 mm walls (Micromouse proportions). Goals are a 1x1 or 2x2 region. Failure is a wall collision or exceeding 120 s of sim time.</p>
+<ul>
+<li><b>Wall follower</b> is cheap but fails on loops. The <code>mz-island</code> map exists on purpose to show that; flood fill solves it.</li>
+<li><b>Flood fill</b> runs in phases: explore to the goal while learning walls, compute shortest path, run it. It uses a distance field over discovered cells.</li>
+<li>A <b>motion layer</b> turns discrete intents ("move to adjacent cell", "turn") into continuous wheel commands. Algorithms reason in cells; the layer owns the physics of getting there. This is also what lets VTL maze programs be short and safe.</li>
+</ul>
+<div class="why"><b>Design lesson from bugs:</b> early maze runs circled forever because the arrival target was recomputed from the robot's live position every tick, so the goalpost moved with the robot. Targets must be latched when a move is issued, not derived each tick.</div></section>
+
+<section id="render"><h2><span class="n">8</span>Rendering: 3D and 2D</h2>
+<ul>
+<li>R3F scene built from primitives with a directional light and shadows. Camera presets: isometric, top-down, chase (the chase camera rotates to the robot's heading rather than just translating).</li>
+<li>2D Canvas view is the debug layer and shares the same state.</li>
+<li>Telemetry panel shows speed, wheel commands, error, P/I/D terms and an error-vs-time sparkline.</li>
+<li>Pages are lazy-loaded so visiting the homepage never initializes Three.js or the sim engine.</li>
+</ul></section>
+
+<section id="state"><h2><span class="n">9</span>State management</h2>
+<p>One Zustand store holds mode, map, robot, algorithm, sensor layout, params, playback and telemetry. Every selection action goes through a single internal <code>rebuild()</code> that constructs a fresh engine snapshot and updates state atomically, then calls <code>persist()</code>.</p>
+<div class="why"><b>Why one rebuild path:</b> it makes "selection changed" the only way an engine gets created, so there is no half-updated state where, say, the robot changed but the sensors still belong to the old chassis.</div>
+<h3>A real bug in this area</h3>
+<p>Custom sensor layouts are fit to a specific chassis, so switching robots deliberately does not carry the old robot's layout over. The original implementation reset to the new robot's built-in default every time, which meant saving a custom layout for one robot, switching away and switching back lost it. Fix: a <code>layoutByRobot</code> map remembers each robot's own last layout. It is an additive field in the save, so old saves backfill to <code>{}</code> with no version bump. Chassis-scoping is preserved: you only ever get <i>that robot's</i> layout back.</p></section>
+
+<section id="persist"><h2><span class="n">10</span>Persistence and migrations</h2>
+<ul>
+<li>Save lives under <code>vectortrack.v3</code>: last session, tuned params, best runs, completed maps, settings, per-robot layout memory. Custom maps and custom algorithms have their own keys so a bad write to one never corrupts another.</li>
+<li><b>Never lose user data:</b> v1 → v2 was purely additive; v2 → v3 rewrote best-run keys to include the sensor layout id (a best time under one sensor layout is not comparable to another). Migration reads the old key, writes the new one, and falls back to defaults on any parse error.</li>
+<li><b>Additive fields over version bumps:</b> new fields are simply absent in old saves and the <code>{...defaults, ...parsed}</code> spread backfills them.</li>
+<li><b>Debounced writes</b> (500 ms) because param sliders fire constantly, plus <code>flushSaveData()</code> on <code>pagehide</code>/<code>beforeunload</code>. Without the flush, saving a sensor layout and reloading inside the debounce window silently reverted to Default. Reproduced and fixed with a test.</li>
+<li>Storage failures (quota, disabled) are swallowed: persistence must never crash the app.</li>
+</ul></section>
+
+<section id="routing"><h2><span class="n">11</span>Routing and deployment</h2>
+<ul>
+<li><b>HashRouter</b>, not BrowserRouter: GitHub Pages is a static host with no rewrite rules, so a deep link like <code>/simulator</code> would 404 on refresh. Hash routes sidestep that with zero server config.</li>
+<li>Vite <code>base: '/VectorTrack/'</code> for the project-page subpath. A case mismatch in that base once produced a blank deployed site, a good example of something that works in dev and breaks in prod.</li>
+<li>Deployment: GitHub Actions on push to <code>main</code>: <code>npm ci</code> → <code>npm run test:run</code> → <code>npm run build</code> → upload to Pages. Tests gate the deploy.</li>
+<li>Static pages in <code>public/</code> (such as this one) are copied verbatim into the build and are outside the SPA router, so they are reachable by URL without being linked from the app.</li>
+</ul></section>
+
+<section id="mapmaker"><h2><span class="n">12</span>The map maker</h2>
+<ul>
+<li><b>Maze editor:</b> a lattice canvas where you toggle wall segments, place start and goal.</li>
+<li><b>Line editor:</b> a paint grid. Rule: <i>store the paint grid, never the bitmap</i>. The smooth track is recomputed from the grid (<code>maps/line/smoothing.ts</code>), so saves stay tiny and the renderer can improve without migrating data.</li>
+<li>Pan and zoom live in a pure <code>canvasView.ts</code> (zoom toward cursor, clamped 1 to 8x), so the math is unit-testable without a DOM.</li>
+<li><b>Validation:</b> started with many rules and blocked Save; after user feedback I cut the heuristics nobody could act on rather than just downgrading them. Remaining rules measure something actionable (corridor width vs chassis, turn clearance, sensor range). Lesson: a warning the user cannot act on is noise.</li>
+<li>An AI map generation skill file is downloadable, so an LLM can emit maps in the editor's format.</li>
+</ul></section>
+
+<section id="vtl"><h2><span class="n">13</span>VTL: the custom algorithm language</h2>
+<h3>Why a language instead of a JS sandbox</h3>
+<ul>
+<li>Running user JS safely in a browser (eval, workers, timeouts) is hard to make airtight and impossible to make deterministic.</li>
+<li>A small language gives <b>static guarantees</b>: bounded cost, no recursion, no randomness, errors with line and column.</li>
+<li>Compile errors name the mode ("<code>can_move</code> is a maze builtin") instead of failing at runtime.</li>
+</ul>
+<h3>Pipeline</h3>
+<pre><code>source text -> lexer -> parser (AST) -> analyzer (scopes, types, mode rules, loop bounds)
+            -> interpreter (tree-walk, per-tick node budget)</code></pre>
+<p>Source text is the stored form, never a compiled artifact: the AST is re-derivable in microseconds.</p>
+<h3>Language shape</h3>
+<ul>
+<li>Python-like indentation blocks (LLMs write them reliably), <code>param</code> / <code>state</code> / <code>let</code> / <code>set</code>, <code>on tick:</code> events, one grammar for both modes with different builtins in scope.</li>
+<li><code>for i in a..b:</code> with <b>mandatory bounds</b>: a literal, <code>len(x)</code> or <code>sensor_count()</code>. No <code>while</code>, no recursion, no user functions.</li>
+<li><code>state x[N] = v</code> arrays and flat row-major <code>table</code> literals (a square table renders as a grid in the editor); <code>steer(base, correction)</code> and <code>deriv(e, tau)</code> as sugar over the PID math.</li>
+</ul>
+<h3>Safety model (two layers)</h3>
+<ol>
+<li><b>Compile time:</b> loop bounds must be statically known, so cost can be checked before running. A bad bound is a line-numbered error (<code>VTL015</code>), and a statically known budget overflow is <code>VTL014</code>.</li>
+<li><b>Runtime:</b> a hard per-tick evaluated-node budget (16384, nesting depth 3). This is what actually makes it hang-proof and would catch any construct the static check missed. Computed array indices are checked at runtime (<code>VTL017</code>).</li>
+</ol>
+<div class="why"><b>Key insight:</b> the runtime budget, not the absence of <code>while</code>, provides safety. Bounded loops are required so the cost can be rejected <i>early with a good message</i>, and because they push maze algorithms into the right shape.</div>
+<h3>Errors are part of the product</h3>
+<p>Every message names the problem, line and column, and what <i>is</i> available. This matters doubly because the language is designed to be written by LLMs too: a downloadable skill file documents the grammar, and good errors let a model self-correct.</p>
+<h3>Hot-swap</h3>
+<p>Editing code mid-run recompiles and keeps matching <code>state</code> (scalars and arrays) by name and type, resetting anything whose type or length changed. Tested for both scalar and array cases.</p>
+<h3>Equivalence testing</h3>
+<p>The VTL PID rewritten with <code>steer</code>/<code>deriv</code> is tested to match the explicit hand-written PID tick for tick, and VTL wall follower/flood fill are checked against the native TS versions. That is what justifies calling the shorthand "sugar".</p></section>
+
+<section id="layouts"><h2><span class="n">14</span>Sensor layout editor</h2>
+<ul>
+<li>Drag sensors on a chassis outline; 1 mm grid snap, Shift for free placement; undo/redo; presets; named saved layouts; JSON import and export.</li>
+<li>Layouts are mode-typed (reflectance for line, rangefinder for maze) and tied to a chassis via <code>basedOnRobotId</code>. The sim and the sidebar both resolve the active layout through the same <code>resolveLineSensorPlacements</code>/<code>resolveMazeSensorPlacements</code> functions, falling back to the robot's default if a layout is missing or the wrong type, so a deleted layout can never crash a run.</li>
+<li><b>Import is defensive:</b> accepts a bare array or an envelope, fills missing optional fields, regenerates ids (never trust imported ids), rejects wrong-type sensors, and applies atomically so a bad file never half-replaces the canvas.</li>
+<li>Best-run keys include the layout id, so times are only compared like for like.</li>
+</ul>
+<div class="why"><b>Bug story:</b> the sidebar displayed the robot's <i>static</i> sensor count even after a custom layout changed it, because it read the robot spec instead of the same resolver the sim uses. Rule of thumb: display code must read through the same resolution path as execution code.</div></section>
+
+<section id="testing"><h2><span class="n">15</span>Testing and verification</h2>
+<ul>
+<li>Roughly 370 Vitest tests: kinematics, sensors, runners (full laps as integration tests), VTL lexer/parser/analyzer/interpreter, adapters, store, persistence migrations, equivalence and determinism tests.</li>
+<li><b>Run it, don't just read it.</b> Several serious bugs were invisible to unit tests and review but showed up the moment a real program ran end to end (see the lexer bug below). I made "run the actual program headlessly before shipping a template" a habit, plus headless-browser checks for UI behavior.</li>
+<li><code>tsc -b</code>, not bare <code>tsc --noEmit</code>: the root tsconfig only has project references, so the latter checks nothing while the real build still fails. I was unknowingly trusting a no-op check for several phases.</li>
+<li><code>oxlint</code> with zero warnings caught a real rules-of-hooks violation in the sensor editor before the app was ever run.</li>
+<li>CI runs the full suite before every deploy.</li>
+</ul></section>
+
+<section id="bugs"><h2><span class="n">16</span>Bugs worth telling stories about</h2>
+<table>
+<tr><th>Bug</th><th>Root cause</th><th>Lesson</th></tr>
+<tr><td>Maze robot circled forever</td><td>Arrival target recomputed from live position each tick.</td><td>Latch targets when a move is issued.</td></tr>
+<tr><td>PID "struggled to move"</td><td>D term used the P gain scale; its 1/dt units demanded reversed wheels.</td><td>Check units per term; separate scales.</td></tr>
+<tr><td>Multi-line <code>table</code> literal failed to parse</td><td><code>slice(idx, idx+2)</code> returns 1 char at end of line, so a trailing <code>]</code> matched the 2-char operator branch, skipping bracket-depth bookkeeping.</td><td>Latent bug, harmless until one branch got a side effect. Found only by running a real program, not by unit tests of the grammar. Guard with <code>length === 2</code>.</td></tr>
+<tr><td><code>tsc --noEmit</code> green, build red</td><td>Solution-style root tsconfig checks no files.</td><td>Verify with the exact command CI runs.</td></tr>
+<tr><td>Sensor layout reverted to Default after reload</td><td>500 ms debounce dropped the last write on unload.</td><td>Flush pending writes on <code>pagehide</code>/<code>beforeunload</code>.</td></tr>
+<tr><td>Custom layout forgotten when switching robots</td><td>Robot switch always reset the layout to default.</td><td>Remember per robot; additive save field.</td></tr>
+<tr><td>Sensor editor hook violation and double undo entries</td><td>Early return before hooks; side effect inside a state updater, which StrictMode double-invokes.</td><td>Updaters must be pure; read latest state from a ref.</td></tr>
+<tr><td>Blank screen on deployed site</td><td>Vite base path case mismatch.</td><td>Test the production build under its real base path.</td></tr>
+<tr><td>Docs contradicted themselves (<code>set</code> on <code>let</code>, bare direction identifiers)</td><td>Spec examples did not satisfy the spec's own grammar.</td><td>Executable examples (templates run as tests) expose spec drift.</td></tr>
+</table></section>
+
+<section id="tradeoffs"><h2><span class="n">17</span>Trade-offs and what I'd change</h2>
+<ul>
+<li><b>Kinematic only.</b> No slip, inertia or motor lag, so tuned gains will not transfer exactly to hardware. The trade was determinism, speed and simplicity. A next step would be a first-order motor lag model.</li>
+<li><b>Global gain scale.</b> One <code>ERROR_GAIN_SCALE</code> is a compromise across robots. Per-robot scales or auto-normalization by max speed and wheelbase would be more principled.</li>
+<li><b><code>localStorage</code> only.</b> No sync or sharing beyond JSON export. Fine for a static site; a backend would be needed for leaderboards.</li>
+<li><b>Tree-walking interpreter.</b> Plenty fast at 120 Hz with a 16k-node budget; compiling to closures would only matter for much larger programs.</li>
+<li><b>HashRouter URLs</b> are less clean than path routes, in exchange for zero hosting config.</li>
+<li><b>Tests pass but the environment couldn't always drive a real browser.</b> I compensated with headless Playwright scripts, but a standing end-to-end suite would be better than ad hoc scripts.</li>
+<li><b>Mobile</b> is not optimized; desktop-first by scope.</li>
+</ul></section>
+
+<section id="qa"><h2><span class="n">18</span>Likely interview questions</h2>
+<div class="qa">
+<details><summary>Why separate the simulation from the renderer?</summary><div>Testability and swappability. The core is pure TypeScript, runs in Node, and feeds both a Canvas and a Three.js renderer from the same state. It let me assert on full laps in tests with no GPU, and it guarantees the 2D and 3D views cannot diverge.</div></details>
+<details><summary>How do you keep the simulation deterministic?</summary><div>Fixed 1/120 s timestep with an accumulator (speed multiplier changes steps per frame, not dt), no random sources, strict source-order evaluation in VTL, and tests that run the same program twice and compare trajectories.</div></details>
+<details><summary>Why invent a language instead of letting users write JavaScript?</summary><div>Safety and guarantees. A sandboxed JS runtime is hard to make airtight and cannot promise bounded cost or determinism. VTL has no unbounded loops or recursion, a per-tick node budget, mode-checked builtins, and line-accurate errors, and its compile-time loop-bound check turns would-be hangs into early, readable errors.</div></details>
+<details><summary>How does VTL prevent infinite loops?</summary><div>Two layers: loops require literal, <code>len()</code> or <code>sensor_count()</code> bounds so cost can be checked before running, and a runtime evaluated-node budget per tick backs it up regardless.</div></details>
+<details><summary>How did you handle changing the save format without losing data?</summary><div>Additive fields where possible (missing keys backfilled by spreading over defaults), and explicit versioned migrations when semantics change, like adding the layout id to best-run keys. Migrations read the old key, write the new one, and fall back to defaults on any failure; storage errors never crash the app.</div></details>
+<details><summary>Why HashRouter?</summary><div>GitHub Pages cannot rewrite unknown paths to index.html, so path-based deep links 404 on refresh. Hash routes need no server configuration.</div></details>
+<details><summary>Tell me about a hard bug.</summary><div>The multi-line table literal: a trailing <code>]</code> was lexed through the 2-char operator branch because <code>slice</code> clips silently at end of line. It was a latent bug that only mattered once I added bracket-depth tracking to one branch. Unit tests of the grammar passed; running the real Sugeno program exposed it. The fix was a one-line length guard plus an end-to-end regression test.</div></details>
+<details><summary>How did you decide what to test?</summary><div>Pure logic gets unit tests (kinematics, lexer, migrations); behavior gets integration tests (a robot completes a lap); anything a user could see differ gets an equivalence or end-to-end check. After finding that review alone misses bugs, I treated "ran it and observed it" as the bar for behavior claims, and walked the spec's acceptance criteria one by one, which found an implemented-but-untested array hot-swap path.</div></details>
+<details><summary>What would you do differently?</summary><div>Add a persistent end-to-end browser suite rather than ad hoc scripts, introduce per-robot control scaling instead of one global constant, and add a motor lag model so tuned gains are more realistic.</div></details>
+<details><summary>How does the app scale if there were 100 maps or algorithms?</summary><div>Pages are lazy-loaded, maps and algorithms are data with caps (50 custom algorithms/layouts) and quota-aware writes, and the sim only builds an engine for the current selection. The rendering and sim cost is per-run, not per-library-size.</div></details>
+</div>
+</section>
+
+</div></main>
+</body>
+</html>

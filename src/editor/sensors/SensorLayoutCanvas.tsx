@@ -10,8 +10,14 @@ import { useEffect, useRef, useState } from 'react';
 import type { Pose2D } from '../../sim/core/types';
 import type { LineRobotSpec, MazeRobotSpec } from '../../sim/core/types';
 import type { LineBitmap } from '../../sim/sensors/reflectance';
-import type { SensorPlacement } from '../../sim/sensors/placement';
-import { DEFAULT_SPOT_RADIUS_MM, orderSensorsLeftToRight } from '../../sim/sensors/placement';
+import type { SensorPlacement, SensorType } from '../../sim/sensors/placement';
+import {
+  DEFAULT_SPOT_RADIUS_MM,
+  MAX_RANGEFINDER_SENSORS,
+  MAX_REFLECTANCE_SENSORS,
+  orderSensorsLeftToRight,
+} from '../../sim/sensors/placement';
+import { slugify } from '../../algorithms/custom/codec';
 import { computeTransform, toScreen, toWorld } from '../../render2d/transform';
 import type { Transform } from '../../render2d/transform';
 import type { CanvasView } from '../shell/canvasView';
@@ -98,6 +104,65 @@ function newSensorId(): string {
   return `sensor-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+const SENSOR_LAYOUT_JSON_FORMAT = 'vectortrack-sensor-layout';
+
+function downloadJson(filename: string, data: unknown): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Structural check only, deliberately loose — hand-written JSON won't include `id`, and optional fields (`spotRadiusMm`/`maxRangeMm`) are filled in from the layout's own defaults below. */
+function isPlausibleSensorPlacement(value: unknown, requiredType: SensorType): value is Omit<SensorPlacement, 'id'> {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return v.type === requiredType && typeof v.forwardMm === 'number' && typeof v.lateralMm === 'number';
+}
+
+class SensorLayoutJsonError extends Error {}
+
+/**
+ * Accepts anything reasonable: a bare array of sensors, `{ sensors: [...] }` (this editor's own
+ * export, or a saved `CustomSensorLayout`), or an algorithm-export envelope's embedded
+ * `sensorLayout`/`sensorLayouts`. Every sensor gets a fresh id (user JSON has none, and any it does
+ * have aren't guaranteed unique against the rest of the current layout) and missing optional fields
+ * fall back to this layout's own defaults, same as a freshly-added sensor.
+ */
+function parseSensorLayoutJson(json: unknown, requiredType: SensorType, defaults: { spotRadiusMm: number; maxRangeMm: number }): SensorPlacement[] {
+  const obj = typeof json === 'object' && json !== null ? (json as Record<string, unknown>) : null;
+  const candidate = Array.isArray(json)
+    ? json
+    : Array.isArray(obj?.sensors)
+      ? obj!.sensors
+      : Array.isArray(obj?.sensorLayouts)
+        ? (obj!.sensorLayouts as Array<Record<string, unknown>>).flatMap((l) => (Array.isArray(l?.sensors) ? l.sensors : []))
+        : obj?.sensorLayout && typeof obj.sensorLayout === 'object'
+          ? ((obj.sensorLayout as Record<string, unknown>).sensors ?? [])
+          : null;
+  if (!Array.isArray(candidate) || candidate.length === 0) {
+    throw new SensorLayoutJsonError('No sensors found in that file.');
+  }
+  const plausible = candidate.filter((s): s is Record<string, unknown> => isPlausibleSensorPlacement(s, requiredType));
+  if (plausible.length === 0) {
+    throw new SensorLayoutJsonError(
+      `No valid "${requiredType}" sensors found — each needs at least {"type": "${requiredType}", "forwardMm": <number>, "lateralMm": <number>}.`,
+    );
+  }
+  return plausible.map((s) => ({
+    id: newSensorId(),
+    type: requiredType,
+    forwardMm: s.forwardMm as number,
+    lateralMm: s.lateralMm as number,
+    headingDeg: typeof s.headingDeg === 'number' ? s.headingDeg : 0,
+    ...(requiredType === 'reflectance' ? { spotRadiusMm: typeof s.spotRadiusMm === 'number' ? s.spotRadiusMm : defaults.spotRadiusMm } : {}),
+    ...(requiredType === 'rangefinder' ? { maxRangeMm: typeof s.maxRangeMm === 'number' ? s.maxRangeMm : defaults.maxRangeMm } : {}),
+  }));
+}
+
 function snap(mm: number, free: boolean): number {
   return free ? mm : Math.round(mm / GRID_SNAP_MM) * GRID_SNAP_MM;
 }
@@ -124,7 +189,7 @@ export function SensorLayoutCanvas({ open, onClose }: { open: boolean; onClose: 
 
   const robot = mode === 'line' ? getLineRobot(robotId) : getMazeRobot(robotId);
   const requiredType = mode === 'line' ? 'reflectance' : 'rangefinder';
-  const [minCount, maxCount] = mode === 'line' ? [1, 12] : [1, 6];
+  const [minCount, maxCount] = mode === 'line' ? [1, MAX_REFLECTANCE_SENSORS] : [1, MAX_RANGEFINDER_SENSORS];
 
   const initial = loadInitialSensors(mode, robotId, layoutId);
   const [sensors, setSensors] = useState<SensorPlacement[]>(initial.sensors);
@@ -134,6 +199,7 @@ export function SensorLayoutCanvas({ open, onClose }: { open: boolean; onClose: 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const [arraySpanMm, setArraySpanMm] = useState(60);
   const [arrayForwardMm, setArrayForwardMm] = useState(isLineRobot(robot) ? robot.sensorForwardOffset : 60);
   const [arrayStaggerMm, setArrayStaggerMm] = useState(12);
@@ -156,6 +222,7 @@ export function SensorLayoutCanvas({ open, onClose }: { open: boolean; onClose: 
   const panRef = useRef<{ lastX: number; lastY: number } | null>(null);
   const bitmapCanvasRef = useRef<{ mapId: string; canvas: HTMLCanvasElement } | null>(null);
   const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [, forceResize] = useState(0);
 
   useEffect(() => {
@@ -252,6 +319,36 @@ export function SensorLayoutCanvas({ open, onClose }: { open: boolean; onClose: 
     setName(`${preset.name.replace(' (default)', '')} custom`);
     setSelectedId(null);
     selectSensorLayout(robotId);
+  }
+
+  function handleExportJson(): void {
+    downloadJson(`${slugify(name || robot.name)}.sensors.json`, {
+      format: SENSOR_LAYOUT_JSON_FORMAT,
+      formatVersion: 1,
+      name,
+      mode,
+      basedOnRobotId: robotId,
+      sensors: orderSensorsLeftToRight(sensors),
+    });
+  }
+
+  async function handleImportFiles(files: FileList | null): Promise<void> {
+    if (!files || files.length === 0) return;
+    try {
+      const text = await files[0].text();
+      const defaults = {
+        spotRadiusMm: DEFAULT_SPOT_RADIUS_MM,
+        maxRangeMm: mode === 'maze' ? (robot as MazeRobotSpec).sensorRange : 0,
+      };
+      const imported = parseSensorLayoutJson(JSON.parse(text), requiredType, defaults).slice(0, maxCount);
+      commit(orderSensorsLeftToRight(imported));
+      setSelectedId(null);
+      setImportError(null);
+    } catch (err) {
+      setImportError(err instanceof SensorLayoutJsonError ? err.message : 'Could not read that file — is it valid JSON?');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   }
 
   const issues = validateSensorLayout({
@@ -673,6 +770,35 @@ export function SensorLayoutCanvas({ open, onClose }: { open: boolean; onClose: 
                   </optgroup>
                 )}
               </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Import / export JSON</h2>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e) => void handleImportFiles(e.target.files)}
+              />
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 rounded-md border border-neutral-700 px-2 py-1.5 text-neutral-300 hover:border-neutral-600"
+                >
+                  Import
+                </button>
+                <button type="button" onClick={handleExportJson} className="flex-1 rounded-md border border-neutral-700 px-2 py-1.5 text-neutral-300 hover:border-neutral-600">
+                  Export
+                </button>
+              </div>
+              <p className="text-neutral-500">
+                A JSON array of sensors, e.g. {'[{"type":"'}
+                {requiredType}
+                {'","forwardMm":60,"lateralMm":-20}]'}
+              </p>
+              {importError && <p className="text-red-400">{importError}</p>}
             </div>
 
             {mode === 'line' && (

@@ -1,4 +1,4 @@
-// VTL error codes VTL001-VTL014 — internal-docs/Algorithms.md §1.9.
+// VTL error codes VTL001-VTL017 — internal-docs/Algorithms.md §1.9.
 // Every message here is public-facing copy (SPEC.md's copy standard): no section
 // references, no "not yet implemented" language.
 
@@ -18,7 +18,10 @@ export type VtlErrorCode =
   | "VTL011"
   | "VTL012"
   | "VTL013"
-  | "VTL014";
+  | "VTL014"
+  | "VTL015"
+  | "VTL016"
+  | "VTL017";
 
 export function makeError(
   code: VtlErrorCode,

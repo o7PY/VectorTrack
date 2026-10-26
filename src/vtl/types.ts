@@ -33,7 +33,8 @@ export type Expr =
   | Identifier
   | CallExpr
   | UnaryExpr
-  | BinaryExpr;
+  | BinaryExpr
+  | IndexExpr;
 
 export interface NumberLit extends SourcePos {
   kind: "number";
@@ -69,7 +70,16 @@ export interface BinaryExpr extends SourcePos {
   right: Expr;
 }
 
-export type Statement = LetStmt | SetStmt | IfStmt | CallStmt;
+// `mu[i]` — reading one element of an array or table. Always infers type "number" (arrays hold
+// numbers only), so to the analyzer it's indistinguishable from any other number expression.
+// v0.3.1.md §D.
+export interface IndexExpr extends SourcePos {
+  kind: "index";
+  name: string;
+  index: Expr;
+}
+
+export type Statement = LetStmt | SetStmt | IfStmt | CallStmt | ForStmt | IndexedSetStmt;
 
 export interface LetStmt extends SourcePos {
   kind: "let";
@@ -81,6 +91,26 @@ export interface SetStmt extends SourcePos {
   kind: "set";
   name: string;
   expr: Expr;
+}
+
+// `set mu[i] = v` — writing one element of an array (never a table; tables are immutable).
+export interface IndexedSetStmt extends SourcePos {
+  kind: "indexedSet";
+  name: string;
+  index: Expr;
+  expr: Expr;
+}
+
+// `for i in from..to:` — `from`/`to` are ordinary expressions; the analyzer statically resolves
+// them to one of {literal, len(...), sensor_count()} (optionally minus a literal) and rejects
+// anything else as VTL015. The loop variable is a fresh, immutable, block-scoped binding.
+// v0.3.1.md §C.1/§C.2.
+export interface ForStmt extends SourcePos {
+  kind: "for";
+  varName: string;
+  from: Expr;
+  to: Expr;
+  body: Statement[];
 }
 
 export interface IfBranch {
@@ -118,11 +148,24 @@ export interface ParamDeclString extends SourcePos {
 
 export type ParamDecl = ParamDeclNumber | ParamDeclString;
 
+// `length: null` is an ordinary scalar state. `length: N` is `state name[N] = value` — an array of
+// N numbers, each initialized to `value`. Arrays hold numbers only (v0.3.1.md §C.2), so `valueKind`
+// is always "number" when `length` isn't null.
 export interface StateDecl extends SourcePos {
   kind: "state";
   name: string;
   valueKind: "number" | "string" | "none";
   value: number | string | null;
+  length: number | null;
+}
+
+// `table t = [...]` — an immutable, compile-time-only array of number literals. Lives on
+// `Program`, not `VtlRunState`: it never changes at runtime, so it costs no per-run storage.
+// v0.3.1.md §C/§G.
+export interface TableDecl extends SourcePos {
+  kind: "table";
+  name: string;
+  values: number[];
 }
 
 export type VtlEventName = "start" | "tick" | "junction";
@@ -136,6 +179,7 @@ export interface EventBlock extends SourcePos {
 export interface Program {
   params: ParamDecl[];
   states: StateDecl[];
+  tables: TableDecl[];
   events: EventBlock[];
 }
 

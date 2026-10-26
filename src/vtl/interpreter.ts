@@ -2,7 +2,8 @@
 // host-supplied builtin implementations (wired up per mode by sim/algorithms/vtlAdapter.ts in a
 // later phase) and runs one event at a time. See internal-docs/Algorithms.md §1.6/§1.10.
 
-import type { Expr, Program, Statement, VtlEventName } from "./types";
+import { DEFAULT_NODE_BUDGET } from "./caps";
+import type { Expr, Identifier, Program, Statement, VtlEventName } from "./types";
 
 export type VtlValue = number | string | boolean | null;
 
@@ -35,17 +36,24 @@ export interface VtlRunState {
   // Read-only global identifiers that aren't params/states, e.g. maze mode's direction words
   // (Algorithms.md §1.7) — supplied by the caller since the interpreter itself is mode-agnostic.
   constants: Map<string, VtlValue>;
+  // Array states only — tables are compile-time-only and read straight from `Program` instead.
+  arrays: Map<string, number[]>;
 }
 
 export function createRunState(program: Program, constants: Record<string, VtlValue> = {}): VtlRunState {
   const states = new Map<string, VtlValue>();
-  for (const s of program.states) states.set(s.name, s.value);
+  const arrays = new Map<string, number[]>();
+  for (const s of program.states) {
+    if (s.length !== null) {
+      arrays.set(s.name, new Array(s.length).fill(s.value as number));
+    } else {
+      states.set(s.name, s.value);
+    }
+  }
   const params = new Map<string, VtlValue>();
   for (const p of program.params) params.set(p.name, p.value);
-  return { states, params, constants: new Map(Object.entries(constants)) };
+  return { states, params, constants: new Map(Object.entries(constants)), arrays };
 }
-
-const DEFAULT_NODE_BUDGET = 4096;
 
 export function truthy(v: VtlValue): boolean {
   if (typeof v === "boolean") return v;
@@ -149,11 +157,20 @@ export class Interpreter {
   private builtins: Record<string, VtlBuiltinFn>;
   private nodeBudget: number;
   private nodeCount = 0;
+  private tableValues = new Map<string, number[]>();
 
   constructor(program: Program, builtins: Record<string, VtlBuiltinFn>, nodeBudget = DEFAULT_NODE_BUDGET) {
     this.program = program;
     this.builtins = builtins;
     this.nodeBudget = nodeBudget;
+    for (const t of program.tables) this.tableValues.set(t.name, t.values);
+  }
+
+  // Arrays are mutable per-run state; tables are immutable and read straight from the program.
+  private readIndexable(name: string, state: VtlRunState): number[] {
+    const arr = state.arrays.get(name) ?? this.tableValues.get(name);
+    if (!arr) throw new Error(`Internal error: "${name}" is neither an array nor a table.`);
+    return arr;
   }
 
   // Runs every event block matching `eventName`, in source order (Algorithms.md §1.5: "strictly
@@ -216,6 +233,32 @@ export class Interpreter {
       case "callStmt":
         this.evalCall(stmt.name, stmt.args, stmt.line, stmt.column, scope, state);
         return;
+      case "indexedSet": {
+        const idx = Math.trunc(toFiniteNumber(this.evalExpr(stmt.index, scope, state), "[...]", stmt.line, stmt.column));
+        const value = toFiniteNumber(this.evalExpr(stmt.expr, scope, state), "set", stmt.line, stmt.column);
+        const arr = state.arrays.get(stmt.name);
+        if (!arr) throw new Error(`Internal error: array "${stmt.name}" not found.`);
+        if (idx < 0 || idx >= arr.length) {
+          throw new VtlRuntimeHalt(
+            "VTL017",
+            `Index ${idx} is out of range for "${stmt.name}" (length ${arr.length}).`,
+            stmt.line,
+            stmt.column,
+          );
+        }
+        arr[idx] = value;
+        return;
+      }
+      case "for": {
+        const from = Math.trunc(toFiniteNumber(this.evalExpr(stmt.from, scope, state), "for", stmt.line, stmt.column));
+        const to = Math.trunc(toFiniteNumber(this.evalExpr(stmt.to, scope, state), "for", stmt.line, stmt.column));
+        for (let i = from; i <= to; i++) {
+          const child = scope.child();
+          child.declare(stmt.varName, i);
+          this.execStatements(stmt.body, child, state);
+        }
+        return;
+      }
       default: {
         const _exhaustive: never = stmt;
         return _exhaustive;
@@ -231,6 +274,13 @@ export class Interpreter {
     scope: RuntimeScope,
     state: VtlRunState,
   ): VtlValue {
+    // `len(name)` is a language-level pseudo-function: its argument is a bare array/table name,
+    // resolved from the AST directly rather than evaluated as a normal expression (the analyzer
+    // guarantees the argument is an Identifier naming a declared array or table).
+    if (name === "len") {
+      const arg = argExprs[0] as Identifier;
+      return this.readIndexable(arg.name, state).length;
+    }
     const args = argExprs.map((a) => this.evalExpr(a, scope, state));
     const fn = this.builtins[name];
     if (!fn) {
@@ -260,6 +310,19 @@ export class Interpreter {
       }
       case "call":
         return this.evalCall(expr.name, expr.args, expr.line, expr.column, scope, state);
+      case "index": {
+        const arr = this.readIndexable(expr.name, state);
+        const idx = Math.trunc(toFiniteNumber(this.evalExpr(expr.index, scope, state), "[...]", expr.line, expr.column));
+        if (idx < 0 || idx >= arr.length) {
+          throw new VtlRuntimeHalt(
+            "VTL017",
+            `Index ${idx} is out of range for "${expr.name}" (length ${arr.length}).`,
+            expr.line,
+            expr.column,
+          );
+        }
+        return arr[idx];
+      }
       case "unary": {
         const v = this.evalExpr(expr.expr, scope, state);
         if (expr.op === "-") return -toFiniteNumber(v, "-", expr.line, expr.column);

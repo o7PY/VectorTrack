@@ -131,3 +131,58 @@ describe('VTL PID vs. native pid.ts — equivalence on lf-oval', () => {
     expect(vtlState.status.outcome).toBe('success');
   });
 });
+
+// v0.3.1.md §F.2 claims `steer(base, Kp*e + Ki*I + Kd*deriv(e, 0.12))` is algebraically identical
+// to the hand-rolled `corr = Kp*e*340 + Ki*I*340 + Kd*d*20` form above. Verified here by running
+// both programs through the real vtlAdapter.ts (not by inspecting the formulas) — PLAN.md Phase Q.
+const STEER_PID_PROGRAM = `
+param Kp = 0.45 range 0..2
+param Ki = 0.00 range 0..0.5
+param Kd = 0.12 range 0..1
+param base = 250 range 50..800
+
+state integral = 0
+
+on tick:
+  let e = line_error()
+  set integral = clamp(integral + e * dt(), -1, 1)
+  steer(base, Kp * e + Ki * integral + Kd * deriv(e, 0.12))
+`;
+
+describe('VTL steer()/deriv() form vs. the hand-rolled PID form — equivalence on lf-oval', () => {
+  it('produces an identical trajectory tick-for-tick', () => {
+    const handRolled = compile(PID_PROGRAM, 'line');
+    const steerForm = compile(STEER_PID_PROGRAM, 'line');
+    if (!handRolled.ok) throw new Error(`compile failed: ${handRolled.errors.map((e) => e.message).join('; ')}`);
+    if (!steerForm.ok) throw new Error(`compile failed: ${steerForm.errors.map((e) => e.message).join('; ')}`);
+
+    const { config, sensorCount } = makeConfig('lf-oval', 'lf-scout');
+    const baseSpeed = 250;
+    const dt = 1 / 120;
+
+    const handController = createVtlLineController(handRolled.program, config.sensorPlacements);
+    handController.reset();
+    let handState = initLineRunState(config, sensorCount);
+
+    const steerController = createVtlLineController(steerForm.program, config.sensorPlacements);
+    steerController.reset();
+    let steerState = initLineRunState(config, sensorCount);
+
+    const maxTicks = 120 * 90;
+    for (let ticks = 0; ticks < maxTicks; ticks++) {
+      const handDone = handState.status.outcome === 'success' || handState.status.outcome === 'failed';
+      const steerDone = steerState.status.outcome === 'success' || steerState.status.outcome === 'failed';
+      if (handDone && steerDone) break;
+
+      if (!handDone) handState = tickLine(handState, config, handController, {}, baseSpeed, dt);
+      if (!steerDone) steerState = tickLine(steerState, config, steerController, {}, baseSpeed, dt);
+
+      const dist = Math.hypot(handState.pose.x - steerState.pose.x, handState.pose.y - steerState.pose.y);
+      expect(dist).toBeLessThan(1e-6); // mm — the two forms should be bit-for-bit identical
+      expect(Math.abs(handState.pose.theta - steerState.pose.theta)).toBeLessThan(1e-6); // radians
+    }
+
+    expect(handState.status.outcome).toBe('success');
+    expect(steerState.status.outcome).toBe('success');
+  });
+});

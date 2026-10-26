@@ -74,6 +74,7 @@ interface StoreState {
   tunedParams: Record<string, Record<string, number | string>>;
   bestRuns: Record<string, { completed: boolean; timeMs: number; achievedAt: string }>;
   completedMaps: string[];
+  layoutByRobot: Record<string, string>;
 
   selectMode: (mode: Mode) => void;
   selectMap: (mapId: string) => void;
@@ -215,6 +216,7 @@ export const useStore = create<StoreState>((set, get) => {
       tunedParams: s.tunedParams,
       bestRuns: s.bestRuns,
       completedMaps: s.completedMaps,
+      layoutByRobot: s.layoutByRobot,
       settings: {
         viewMode: s.viewMode,
         cameraPreset: s.cameraPreset,
@@ -287,13 +289,16 @@ export const useStore = create<StoreState>((set, get) => {
     tunedParams: initialSave.tunedParams,
     bestRuns: initialSave.bestRuns,
     completedMaps: initialSave.completedMaps,
+    layoutByRobot: initialSave.layoutByRobot,
 
     selectMode(mode) {
       if (mode === get().mode) return;
       const robotId = mode === 'line' ? 'lf-scout' : 'mz-probe';
       const mapId = mode === 'line' ? 'lf-oval' : 'mz-intro';
       const algorithmId = mode === 'line' ? 'pid' : 'wallFollower';
-      rebuild(mode, mapId, robotId, algorithmId, robotId);
+      // Same "remember this robot's own last layout" lookup as selectRobot, so switching modes and
+      // back doesn't forget a saved layout either.
+      rebuild(mode, mapId, robotId, algorithmId, get().layoutByRobot[robotId] ?? robotId);
       persist();
     },
     selectMap(mapId) {
@@ -305,9 +310,11 @@ export const useStore = create<StoreState>((set, get) => {
     selectRobot(robotId) {
       const s = get();
       if (robotId === s.robotId) return;
-      // A custom layout is fit to a specific chassis (`basedOnRobotId`) — switching robots resets
-      // to the new robot's own default layout rather than carrying over one that may not apply.
-      rebuild(s.mode, s.mapId, robotId, s.algorithmId, robotId);
+      // A custom layout is fit to a specific chassis (`basedOnRobotId`), so switching robots never
+      // carries the OLD robot's layout over to the new one — but the new robot gets ITS OWN last
+      // picked layout back (`layoutByRobot`), rather than always resetting to the built-in default;
+      // without this, switching away and back to a robot "forgot" a layout you'd just saved for it.
+      rebuild(s.mode, s.mapId, robotId, s.algorithmId, s.layoutByRobot[robotId] ?? robotId);
       persist();
     },
     selectAlgorithm(algorithmId) {
@@ -320,6 +327,7 @@ export const useStore = create<StoreState>((set, get) => {
       const s = get();
       if (layoutId === s.layoutId) return;
       rebuild(s.mode, s.mapId, s.robotId, s.algorithmId, layoutId);
+      set({ layoutByRobot: { ...s.layoutByRobot, [s.robotId]: layoutId } });
       persist();
     },
     setParam(key, value) {

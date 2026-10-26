@@ -55,8 +55,21 @@ export interface VtlMazeController extends MazeController {
 function transplantMatchingState(previous: VtlRunState['states'], nextProgram: Program): VtlRunState['states'] {
   const next = new Map<string, VtlValue>();
   for (const s of nextProgram.states) {
+    if (s.length !== null) continue; // arrays are handled by transplantMatchingArrays
     const prevValue = previous.get(s.name);
     next.set(s.name, prevValue !== undefined && typeof prevValue === typeof s.value ? prevValue : s.value);
+  }
+  return next;
+}
+
+// Same idea as transplantMatchingState, for array states — preserved only when the new program
+// still declares an array of the same name and length (v0.3.1.md §G).
+function transplantMatchingArrays(previous: VtlRunState['arrays'], nextProgram: Program): VtlRunState['arrays'] {
+  const next = new Map<string, number[]>();
+  for (const s of nextProgram.states) {
+    if (s.length === null) continue;
+    const prevArr = previous.get(s.name);
+    next.set(s.name, prevArr && prevArr.length === s.length ? [...prevArr] : new Array(s.length).fill(s.value as number));
   }
   return next;
 }
@@ -283,7 +296,12 @@ export function createVtlMazeController(program: Program, onLog?: VtlLogHandler,
     },
     hotSwap(newProgram) {
       program = newProgram;
-      runState = { states: transplantMatchingState(runState.states, newProgram), params: createRunState(newProgram, constants).params, constants: runState.constants };
+      runState = {
+        states: transplantMatchingState(runState.states, newProgram),
+        arrays: transplantMatchingArrays(runState.arrays, newProgram),
+        params: createRunState(newProgram, constants).params,
+        constants: runState.constants,
+      };
       interp = new Interpreter(newProgram, builtins);
       hasTickEvent = newProgram.events.some((e) => e.event === 'tick');
       halted = false;

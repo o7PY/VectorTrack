@@ -34,8 +34,8 @@ const DIRECTION_CONSTANTS = new Set<string>(MAZE_DIRECTION_CONSTANTS);
 // Mirrors `vtl/lexer.ts`'s OPERATORS list — small and grammar-frozen enough that duplicating it
 // here (rather than exporting it from the lexer) is simpler than threading a shared constant
 // through a module that otherwise has no reason to know this file exists.
-const TWO_CHAR_OPERATORS = new Set(['..', '<=', '>=', '==', '!=']);
-const ONE_CHAR_OPERATORS = new Set(['(', ')', ':', ',', '+', '-', '*', '/', '%', '<', '>', '=']);
+export const TWO_CHAR_OPERATORS = new Set(['..', '<=', '>=', '==', '!=']);
+export const ONE_CHAR_OPERATORS = new Set(['(', ')', '[', ']', ':', ',', '+', '-', '*', '/', '%', '<', '>', '=']);
 
 function isDigit(ch: string): boolean {
   return ch >= '0' && ch <= '9';

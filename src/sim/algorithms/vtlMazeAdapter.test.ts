@@ -218,4 +218,38 @@ describe('createVtlMazeController — hotSwap (Algorithms.md §3.2 live editing 
     controller.hotSwap(v2);
     expect(() => tickMaze(state, config, controller, {}, DT)).not.toThrow();
   });
+
+  it('preserves array contents across hotSwap when the name and length still match (v0.3.1.md §K.13)', () => {
+    const logged: Record<string, unknown> = {};
+    const v1 = compileMaze('state buf[3] = 0\non tick:\n  set buf[0] = 5\n  set buf[1] = 6\n  set buf[2] = 7\n');
+    const controller = createVtlMazeController(v1, (label, value) => (logged[label] = value));
+    controller.reset(ctxOf(config));
+    let state = initMazeRunState(config);
+    state = tickMaze(state, config, controller, {}, DT);
+    // buf is now [5, 6, 7].
+
+    const v2 = compileMaze('state buf[3] = 0\non tick:\n  log("buf0", buf[0])\n  log("buf2", buf[2])\n');
+    controller.hotSwap(v2);
+    tickMaze(state, config, controller, {}, DT);
+    // If the array weren't preserved across the hotSwap, these would both be 0.
+    expect(logged.buf0).toBe(5);
+    expect(logged.buf2).toBe(7);
+  });
+
+  it('resets array contents to the declared fill value across hotSwap when the length changes (v0.3.1.md §K.13)', () => {
+    const logged: Record<string, unknown> = {};
+    const v1 = compileMaze('state buf[3] = 0\non tick:\n  set buf[0] = 9\n  set buf[1] = 9\n  set buf[2] = 9\n');
+    const controller = createVtlMazeController(v1, (label, value) => (logged[label] = value));
+    controller.reset(ctxOf(config));
+    let state = initMazeRunState(config);
+    state = tickMaze(state, config, controller, {}, DT);
+    // buf is now [9, 9, 9].
+
+    const v2 = compileMaze('state buf[4] = 3\non tick:\n  log("buf0", buf[0])\n  log("buf3", buf[3])\n');
+    controller.hotSwap(v2);
+    tickMaze(state, config, controller, {}, DT);
+    // A length change (3 -> 4) resets to the new declared fill value (3), not a truncated/padded [9,...].
+    expect(logged.buf0).toBe(3);
+    expect(logged.buf3).toBe(3);
+  });
 });

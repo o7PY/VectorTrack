@@ -17,6 +17,12 @@ export interface SensorPlacement {
 
 export const DEFAULT_SPOT_RADIUS_MM = 4;
 
+// Single source of truth for the sensor-count range enforced by both the sensor layout editor
+// (editor/sensors/SensorLayoutCanvas.tsx) and VTL's compiler, which resolves `sensor_count()` used
+// as a `for` loop bound to this maximum at compile time (v0.3.1.md §C.3).
+export const MAX_REFLECTANCE_SENSORS = 12;
+export const MAX_RANGEFINDER_SENSORS = 6;
+
 export interface WorldPoint {
   x: number;
   y: number;

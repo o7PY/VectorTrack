@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { clearSaveData, defaultSaveData, loadSaveData, saveSaveDataDebounced } from './persistence';
+import { clearSaveData, defaultSaveData, flushSaveData, loadSaveData, saveSaveDataDebounced } from './persistence';
 
 const V3_KEY = 'vectortrack.v3';
 const V2_KEY = 'vectortrack.v2';
@@ -127,6 +127,19 @@ describe('persistence v1 -> v2 -> v3 migration', () => {
     saveSaveDataDebounced(defaultSaveData, 10);
     await new Promise((r) => setTimeout(r, 50));
     expect(localStorage.getItem(V3_KEY)).not.toBeNull();
+  });
+
+  it('flushSaveData writes a still-pending debounced save immediately, without waiting out the delay', () => {
+    const withCustomLayout = { ...defaultSaveData, lastSession: { ...defaultSaveData.lastSession, layoutId: 'layout:abc123' } };
+    saveSaveDataDebounced(withCustomLayout, 10_000); // long enough that it would not fire on its own during this test.
+    flushSaveData();
+    expect(JSON.parse(localStorage.getItem(V3_KEY)!).lastSession.layoutId).toBe('layout:abc123');
+  });
+
+  it('flushSaveData is a no-op when nothing is pending (e.g. already written, or never scheduled)', () => {
+    localStorage.setItem(V3_KEY, JSON.stringify(defaultSaveData));
+    expect(() => flushSaveData()).not.toThrow();
+    expect(JSON.parse(localStorage.getItem(V3_KEY)!)).toEqual(defaultSaveData);
   });
 
   it('clearSaveData removes the v3 key', () => {

@@ -16,6 +16,12 @@ export interface SaveData {
   // (Algorithms.md §6 / Amendment A4).
   bestRuns: Record<string, { completed: boolean; timeMs: number; achievedAt: string }>;
   completedMaps: string[];
+  // Remembers each robot's own last-picked sensor layout, keyed by robotId. Additive field — a
+  // save written before this existed simply lacks the key, and `loadSaveData`'s spread over
+  // `defaultSaveData` backfills it to `{}`. Without this, switching robots and switching back lost
+  // track of a robot-specific saved layout, always reverting to that robot's built-in default
+  // (ISSUES.md — user-reported: "changed the sensor, it did not come as [robot] custom").
+  layoutByRobot: Record<string, string>;
   settings: {
     viewMode: '2d' | '3d';
     cameraPreset: 'iso' | 'top' | 'chase';
@@ -35,6 +41,7 @@ export const defaultSaveData: SaveData = {
   bestRuns: {},
   completedMaps: [],
   settings: { viewMode: '3d', cameraPreset: 'iso', speedMultiplier: 1, showSensorOverlay: true },
+  layoutByRobot: {},
 };
 
 interface SaveDataV2 extends Omit<SaveData, 'schemaVersion'> {
@@ -142,16 +149,44 @@ export function loadSaveData(): SaveData {
 }
 
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingWrite: SaveData | null = null;
+
+function writeNow(data: SaveData): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // storage unavailable/full: drop silently, never crash the app
+  }
+}
 
 export function saveSaveDataDebounced(data: SaveData, delayMs = 500): void {
   if (writeTimer) clearTimeout(writeTimer);
+  pendingWrite = data;
   writeTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // storage unavailable/full: drop silently, never crash the app
-    }
+    writeTimer = null;
+    pendingWrite = null;
+    writeNow(data);
   }, delayMs);
+}
+
+/**
+ * Writes a still-pending debounced save immediately, a no-op otherwise. Without this, a save made
+ * right before the tab closes/reloads (e.g. saving a sensor layout and immediately refreshing) can
+ * lose up to `delayMs` of state — the selection reverts to whatever was last flushed — even though
+ * the debounce itself is desirable for high-frequency writes like param dragging.
+ */
+export function flushSaveData(): void {
+  if (writeTimer === null || pendingWrite === null) return;
+  clearTimeout(writeTimer);
+  writeTimer = null;
+  const data = pendingWrite;
+  pendingWrite = null;
+  writeNow(data);
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushSaveData);
+  window.addEventListener('beforeunload', flushSaveData);
 }
 
 export function clearSaveData(): void {

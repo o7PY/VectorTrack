@@ -7,6 +7,7 @@ import type { Program } from '../../vtl/types';
 import { computeLineError, WHITE_THRESHOLD } from '../sensors/reflectance';
 import type { SensorPlacement } from '../sensors/placement';
 import { createRunState, Interpreter, VtlRuntimeHalt, type VtlBuiltinFn, type VtlRunState, type VtlValue } from '../../vtl/interpreter';
+import { computeWheelSpeeds, D_GAIN_SCALE, ERROR_GAIN_SCALE } from './lineShared';
 
 export type VtlLogHandler = (label: string, value: VtlValue) => void;
 export type VtlHaltHandler = (halt: VtlRuntimeHalt) => void;
@@ -29,8 +30,23 @@ export interface VtlLineController extends LineController {
 function transplantMatchingState(previous: VtlRunState['states'], nextProgram: Program): VtlRunState['states'] {
   const next = new Map<string, VtlValue>();
   for (const s of nextProgram.states) {
+    if (s.length !== null) continue; // arrays are handled by transplantMatchingArrays
     const prevValue = previous.get(s.name);
     next.set(s.name, prevValue !== undefined && typeof prevValue === typeof s.value ? prevValue : s.value);
+  }
+  return next;
+}
+
+// Same idea as transplantMatchingState, for array states: preserved only when the new program
+// still declares an array of the same name AND the same length — a length change means every
+// existing index assumption in the new source could be wrong, so it's safer to reset than to
+// silently truncate/pad (v0.3.1.md §G).
+function transplantMatchingArrays(previous: VtlRunState['arrays'], nextProgram: Program): VtlRunState['arrays'] {
+  const next = new Map<string, number[]>();
+  for (const s of nextProgram.states) {
+    if (s.length === null) continue;
+    const prevArr = previous.get(s.name);
+    next.set(s.name, prevArr && prevArr.length === s.length ? [...prevArr] : new Array(s.length).fill(s.value as number));
   }
   return next;
 }
@@ -56,6 +72,10 @@ export function createVtlLineController(
   let driveCalled = false;
   let halted = false;
   const logLabels = new Set<string>();
+  // Per-call-site low-pass filter state for deriv(), keyed by `${line}:${column}` so two deriv()
+  // calls in one program get independent filters (v0.3.1.md §F.1). Analyzer forbids calling
+  // deriv() from inside a loop, so a call site's key is always unique per tick.
+  const derivStates = new Map<string, { lastRaw: number; lastOut: number }>();
 
   function sensorIndex(raw: VtlValue, label: string, line: number, column: number): number {
     const i = Math.trunc(raw as number);
@@ -98,6 +118,29 @@ export function createVtlLineController(
       outRight = a[1] as number;
       return null;
     },
+    // Replaces the hand-rolled low-pass derivative filter (ISSUES #14) that used to be
+    // copy-pasted into every PID-flavored example. Matches that filter's math exactly, with the
+    // same `state ... = 0` initial conditions, and pre-scales its output by D_GAIN_SCALE /
+    // ERROR_GAIN_SCALE so it's directly addable to a plain error term (v0.3.1.md §F.1).
+    deriv: (a, ctx) => {
+      const e = a[0] as number;
+      const tau = a[1] as number;
+      const key = `${ctx.line}:${ctx.column}`;
+      const prev = derivStates.get(key) ?? { lastRaw: 0, lastOut: 0 };
+      const raw = (e - prev.lastRaw) / currentDt;
+      const out = prev.lastOut + (raw - prev.lastOut) * (currentDt / (tau + currentDt));
+      derivStates.set(key, { lastRaw: e, lastOut: out });
+      return out * (D_GAIN_SCALE / ERROR_GAIN_SCALE);
+    },
+    // Sugar over drive() + computeWheelSpeeds(), applying ERROR_GAIN_SCALE internally so user
+    // programs never hand-multiply an internal calibration constant (v0.3.1.md §F.2).
+    steer: (a) => {
+      const { vLeft, vRight } = computeWheelSpeeds(a[0] as number, (a[1] as number) * ERROR_GAIN_SCALE);
+      driveCalled = true;
+      outLeft = vLeft;
+      outRight = vRight;
+      return null;
+    },
   };
 
   let interp = new Interpreter(program, builtins);
@@ -127,6 +170,7 @@ export function createVtlLineController(
       driveCalled = false;
       halted = false;
       logLabels.clear();
+      derivStates.clear();
       run('start');
     },
     step(sensors, dt, params, _baseSpeed, maxWheelSpeed) {
@@ -148,7 +192,13 @@ export function createVtlLineController(
     },
     hotSwap(newProgram) {
       program = newProgram;
-      runState = { states: transplantMatchingState(runState.states, newProgram), params: createRunState(newProgram).params, constants: runState.constants };
+      runState = {
+        states: transplantMatchingState(runState.states, newProgram),
+        arrays: transplantMatchingArrays(runState.arrays, newProgram),
+        params: createRunState(newProgram).params,
+        constants: runState.constants,
+      };
+      derivStates.clear();
       interp = new Interpreter(newProgram, builtins);
       halted = false;
     },

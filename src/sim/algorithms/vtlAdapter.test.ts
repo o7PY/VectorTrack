@@ -247,4 +247,34 @@ describe('createVtlLineController — hotSwap (Algorithms.md §3.2 live editing 
     expect(out.vLeft).toBe(123);
     expect(out.vRight).toBe(123);
   });
+
+  it('preserves array contents across hotSwap when the name and length still match (v0.3.1.md §K.13)', () => {
+    const v1 = compileOrThrow('state buf[3] = 0\non tick:\n  set buf[0] = 5\n  set buf[1] = 6\n  set buf[2] = 7\n  drive(0, 0)\n');
+    const controller = createVtlLineController(v1, placements);
+    controller.reset();
+    controller.step([0, 0, 0], 1 / 120, {}, 0, robot.maxWheelSpeed, robot.wheelBase, lateralMm);
+    // buf is now [5, 6, 7] inside the running program.
+
+    const v2 = compileOrThrow('state buf[3] = 0\non tick:\n  drive(buf[0], buf[2])\n');
+    controller.hotSwap(v2);
+    const out = controller.step([0, 0, 0], 1 / 120, {}, 0, robot.maxWheelSpeed, robot.wheelBase, lateralMm);
+    // If the array weren't preserved across the hotSwap, these would be 0, 0.
+    expect(out.vLeft).toBe(5);
+    expect(out.vRight).toBe(7);
+  });
+
+  it('resets array contents to the declared fill value across hotSwap when the length changes (v0.3.1.md §K.13)', () => {
+    const v1 = compileOrThrow('state buf[3] = 0\non tick:\n  set buf[0] = 9\n  set buf[1] = 9\n  set buf[2] = 9\n  drive(0, 0)\n');
+    const controller = createVtlLineController(v1, placements);
+    controller.reset();
+    controller.step([0, 0, 0], 1 / 120, {}, 0, robot.maxWheelSpeed, robot.wheelBase, lateralMm);
+    // buf is now [9, 9, 9] inside the running program.
+
+    const v2 = compileOrThrow('state buf[4] = 3\non tick:\n  drive(buf[0], buf[3])\n');
+    controller.hotSwap(v2);
+    const out = controller.step([0, 0, 0], 1 / 120, {}, 0, robot.maxWheelSpeed, robot.wheelBase, lateralMm);
+    // A length change (3 -> 4) resets to the new declared fill value (3), not a truncated/padded [9,...].
+    expect(out.vLeft).toBe(3);
+    expect(out.vRight).toBe(3);
+  });
 });

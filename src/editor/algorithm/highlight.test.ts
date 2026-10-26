@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { highlightTokens, splitTokensIntoLines } from './highlight';
+import { highlightTokens, ONE_CHAR_OPERATORS, splitTokensIntoLines, TWO_CHAR_OPERATORS } from './highlight';
+import { OPERATORS } from '../../vtl/lexer';
 
 function reassemble(source: string): string {
   return highlightTokens(source)
@@ -42,6 +43,21 @@ describe('highlightTokens', () => {
   it('never drops or duplicates a character, even for unexpected input', () => {
     const source = 'let x = @@@ 1\n';
     expect(reassemble(source)).toBe(source);
+  });
+
+  it('highlights array/table indexing brackets as operators', () => {
+    const tokens = highlightTokens('set a[i] = a[0] + len(a)\n');
+    const brackets = tokens.filter((t) => t.text === '[' || t.text === ']');
+    expect(brackets).toHaveLength(4);
+    for (const t of brackets) expect(t.type).toBe('operator');
+  });
+
+  // v0.3.1.md §H.1: this file hand-duplicates vtl/lexer.ts's operator set rather than importing
+  // it (see the comment above ONE_CHAR_OPERATORS), so an equality check here is the only thing
+  // stopping the two lists from silently drifting apart as the grammar grows.
+  it("its operator set matches vtl/lexer.ts's OPERATORS exactly", () => {
+    const highlightOps = new Set([...TWO_CHAR_OPERATORS, ...ONE_CHAR_OPERATORS]);
+    expect(highlightOps).toEqual(new Set(OPERATORS));
   });
 });
 
