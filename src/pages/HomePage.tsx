@@ -64,18 +64,16 @@ function Hero() {
   return (
     <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-6 py-20 sm:py-28 lg:grid-cols-[1.1fr_1fr] lg:gap-6">
       <div>
-        <span className="inline-block rounded border border-neutral-800 bg-neutral-900 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide text-neutral-500">
-          v0.2.0
-        </span>
         <h1 className="mt-5 text-4xl font-bold leading-[1.1] tracking-tight text-neutral-50 sm:text-5xl">
           Tune the controller.
           <br />
           Watch it drive.
         </h1>
         <p className="mt-5 max-w-lg text-base leading-relaxed text-neutral-400">
-          VectorTrack is an in-browser robotics simulator for line-following and maze-solving
-          algorithms. Drag a PID gain and watch the correction happen on the next tick — or pit
-          flood fill against wall-following on a maze built specifically to defeat one of them.
+          VectorTrack is an in-browser teaching tool and robotics simulator for line-following and
+          maze-solving algorithms. Drag a PID gain and watch the correction happen on the next tick
+          — or pit flood fill against wall-following on a maze built specifically to defeat one of
+          them.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link
@@ -107,10 +105,8 @@ function About() {
       <div className="mx-auto max-w-3xl px-6 py-16 md:py-20">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-sky-500">About VectorTrack</h2>
         <p className="mt-3 text-lg leading-relaxed text-neutral-300">
-          A small, honest simulation core drives everything: differential-drive kinematics, sensor
-          models, and five control algorithms — all pure TypeScript with no dependency on the
-          renderer. Two separate views (a 2D debug canvas and a full 3D scene) read the exact same
-          state, so switching between them never resets a run.
+          VectorTrack is a robot simulator you can watch and tune in real time, switching freely
+          between a 2D debug view and a full 3D scene of the same run.
         </p>
         <p className="mt-4 leading-relaxed text-neutral-400">
           It exists to make control-loop tuning tangible: instead of reading about proportional,
@@ -246,7 +242,7 @@ function Footer() {
   return (
     <footer className="border-t border-neutral-800">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-8 text-sm text-neutral-500">
-        <span>VectorTrack v0.2.0 — a kinematic simulator.</span>
+        <span>VectorTrack v0.3.1 — a kinematic simulator.</span>
         <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-neutral-300">
           <GithubMark />
           Source on GitHub
